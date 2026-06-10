@@ -1,0 +1,2 @@
+# easyphrf
+sailboat race tool
