@@ -1,0 +1,12 @@
+node_modules/
+.npm-cache/
+dist/
+build/
+coverage/
+.env
+.env.local
+*.log
+npm-debug.log*
+.DS_Store
+client/dist/
+server/uploads/
