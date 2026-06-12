@@ -95,3 +95,42 @@ describe('RaceSetup — Next button', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/admin/races/race-3/edit');
   });
 });
+
+describe('RaceSetup — scheduled start time', () => {
+  const timeInput = (container) => container.querySelector('input[type="time"]');
+
+  test('shows the start-time field for simultaneous and saves it as time of day', async () => {
+    mockApi.createRace.mockResolvedValue({ race_id: 'race-1' });
+    const { container } = renderSetup();
+
+    fireEvent.change(timeInput(container), { target: { value: '14:30' } });
+    fireEvent.click(screen.getByRole('button', { name: /Next: Entries/i }));
+
+    await waitFor(() => expect(mockApi.createRace).toHaveBeenCalledTimes(1));
+    expect(mockApi.createRace).toHaveBeenCalledWith(
+      expect.objectContaining({ start_time_of_day: '14:30', start_type: 'simultaneous' })
+    );
+  });
+
+  test('marks the field required and explains it for pursuit races', () => {
+    const { container } = renderSetup();
+    fireEvent.change(screen.getByLabelText('Start type'), { target: { value: 'pursuit' } });
+
+    expect(timeInput(container)).toBeRequired();
+    expect(screen.getByText(/base time pursuit offsets are computed from/i)).toBeInTheDocument();
+  });
+
+  test('hides the start-time field for self_timed and sends null', async () => {
+    mockApi.createRace.mockResolvedValue({ race_id: 'race-2' });
+    const { container } = renderSetup();
+
+    fireEvent.change(screen.getByLabelText('Start type'), { target: { value: 'self_timed' } });
+    expect(timeInput(container)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Next: Entries/i }));
+    await waitFor(() => expect(mockApi.createRace).toHaveBeenCalledTimes(1));
+    expect(mockApi.createRace).toHaveBeenCalledWith(
+      expect.objectContaining({ start_type: 'self_timed', start_time_of_day: null })
+    );
+  });
+});

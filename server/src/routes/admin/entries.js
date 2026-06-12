@@ -7,6 +7,7 @@ const { asyncHandler, notFound, badRequest } = require('../../utils/errors');
 const { requireFields, ensureEnum, pickDefined } = require('../../utils/validate');
 const { buildUpdate } = require('../../utils/sql');
 const { ownedRace } = require('../../services/raceService');
+const { localDateTimeToUtc, utcToZonedParts } = require('../../utils/time');
 
 const router = express.Router({ mergeParams: true });
 
@@ -34,7 +35,15 @@ router.get(
         ORDER BY e.fleet_id, b.sail_number`,
       [req.params.id]
     );
-    res.json(result.rows);
+    // Expose finish/start instants as club-local wall clocks for editing, so the
+    // admin sees and re-saves times in the club's timezone, not UTC.
+    const tz = req.club.timezone;
+    const rows = result.rows.map((e) => ({
+      ...e,
+      finish_time_local: utcToZonedParts(e.finish_time, tz).dateTime,
+      self_start_time_local: utcToZonedParts(e.self_start_time, tz).dateTime,
+    }));
+    res.json(rows);
   })
 );
 
@@ -46,6 +55,7 @@ router.post(
     requireFields(req.body, ['fleet_id', 'boat_id']);
     ensureEnum(req.body.finish_status, FINISH_STATUSES, 'finish_status');
     const b = req.body;
+    const tz = req.club.timezone;
     const result = await db.query(
       `INSERT INTO race_entries
          (race_id, fleet_id, boat_id, phrf_override, phrf_override_note,
@@ -59,8 +69,8 @@ router.post(
         b.phrf_override ?? null,
         b.phrf_override_note ?? null,
         b.using_spinnaker ?? false,
-        b.self_start_time ?? null,
-        b.finish_time ?? null,
+        localDateTimeToUtc(b.self_start_time, tz),
+        localDateTimeToUtc(b.finish_time, tz),
         b.finish_status ?? 'finished',
       ]
     );
@@ -74,7 +84,12 @@ router.put(
   asyncHandler(async (req, res) => {
     await ownedRace(req.club.club_id, req.params.id);
     ensureEnum(req.body.finish_status, FINISH_STATUSES, 'finish_status');
-    const fields = pickDefined(req.body, EDITABLE);
+    // Wall-clock finish/start times are interpreted in the club timezone.
+    const tz = req.club.timezone;
+    const body = { ...req.body };
+    if ('finish_time' in body) body.finish_time = localDateTimeToUtc(body.finish_time, tz);
+    if ('self_start_time' in body) body.self_start_time = localDateTimeToUtc(body.self_start_time, tz);
+    const fields = pickDefined(body, EDITABLE);
     const { clause, values, nextIndex, isEmpty } = buildUpdate(fields);
     if (isEmpty) throw badRequest('No updatable fields supplied');
     const result = await db.query(

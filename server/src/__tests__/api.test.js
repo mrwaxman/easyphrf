@@ -250,6 +250,129 @@ describe('admin races: setup + default fleet', () => {
   });
 });
 
+describe('admin races: scheduled start time (club timezone)', () => {
+  // The demo club is seeded in America/Los_Angeles.
+  test('POST stores start_time from a local time of day in the club tz', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/races')
+      .set(ADMIN)
+      .send({ name: 'Evening', race_date: '2026-07-01', start_type: 'simultaneous', start_time_of_day: '18:00' });
+    expect(res.status).toBe(201);
+    // 18:00 PDT on 2026-07-01 == 01:00 UTC on 2026-07-02.
+    expect(new Date(res.body.start_time).toISOString()).toBe('2026-07-02T01:00:00.000Z');
+
+    const detail = await request(app).get(`/api/v1/admin/races/${res.body.race_id}`).set(ADMIN);
+    expect(detail.body.start_time_of_day).toBe('18:00');
+    expect(detail.body.timezone).toBe('America/Los_Angeles');
+  });
+
+  test('PUT updates start_time from a time of day, reusing the stored race_date', async () => {
+    const created = await request(app)
+      .post('/api/v1/admin/races')
+      .set(ADMIN)
+      .send({ name: 'Pursuit', race_date: '2026-07-01', start_type: 'pursuit' });
+    const raceId = created.body.race_id;
+    expect(created.body.start_time).toBeNull();
+
+    const updated = await request(app)
+      .put(`/api/v1/admin/races/${raceId}`)
+      .set(ADMIN)
+      .send({ start_time_of_day: '10:30' });
+    expect(updated.status).toBe(200);
+    expect(new Date(updated.body.start_time).toISOString()).toBe('2026-07-01T17:30:00.000Z');
+  });
+
+  test('self_timed races ignore a submitted start time', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/races')
+      .set(ADMIN)
+      .send({
+        name: 'Frostbite',
+        race_date: '2026-07-01',
+        start_type: 'self_timed',
+        self_timed_mode: 'fully_independent',
+        start_time_of_day: '18:00',
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.start_time).toBeNull();
+  });
+});
+
+describe('pursuit start sheet without a start time', () => {
+  async function pursuitWithEntries() {
+    const race = (
+      await request(app)
+        .post('/api/v1/admin/races')
+        .set(ADMIN)
+        .send({ name: 'Pursuit', race_date: '2026-07-01', start_type: 'pursuit' })
+    ).body;
+    const fleetId = (await request(app).get(`/api/v1/admin/races/${race.race_id}`).set(ADMIN)).body
+      .fleets[0].fleet_id;
+    for (const [sail, phrf] of [['USA 20', 60], ['USA 21', 150]]) {
+      const boat = await createBoat(club.club_id, { sail_number: sail, phrf_base: phrf });
+      await request(app)
+        .post(`/api/v1/admin/races/${race.race_id}/entries`)
+        .set(ADMIN)
+        .send({ fleet_id: fleetId, boat_id: boat.boat_id });
+    }
+    return race;
+  }
+
+  test('reports needs_start_time instead of throwing a dead-end error', async () => {
+    const race = await pursuitWithEntries();
+    const res = await request(app).get(`/api/v1/admin/races/${race.race_id}/startsheet`).set(ADMIN);
+    expect(res.status).toBe(200);
+    expect(res.body.needs_start_time).toBe(true);
+    expect(res.body.race_date).toBe('2026-07-01');
+    expect(res.body.timezone).toBe('America/Los_Angeles');
+  });
+
+  test('generates the sheet once a start time is set via the API', async () => {
+    const race = await pursuitWithEntries();
+    await request(app)
+      .put(`/api/v1/admin/races/${race.race_id}`)
+      .set(ADMIN)
+      .send({ start_time_of_day: '11:00' });
+
+    const res = await request(app).get(`/api/v1/admin/races/${race.race_id}/startsheet`).set(ADMIN);
+    expect(res.status).toBe(200);
+    expect(res.body.needs_start_time).toBeUndefined();
+    expect(res.body.starts).toHaveLength(2);
+    expect(res.body.starts[0].intervalSeconds).toBe(0);
+  });
+});
+
+describe('simultaneous results use the scheduled start time', () => {
+  test('elapsed = finish - start, both interpreted in the club tz', async () => {
+    const race = (
+      await request(app)
+        .post('/api/v1/admin/races')
+        .set(ADMIN)
+        .send({ name: 'Simul', race_date: '2026-07-01', start_type: 'simultaneous', start_time_of_day: '18:00' })
+    ).body;
+    const fleetId = (await request(app).get(`/api/v1/admin/races/${race.race_id}`).set(ADMIN)).body
+      .fleets[0].fleet_id;
+    const boat = await createBoat(club.club_id, { sail_number: 'USA 30', phrf_base: 100 });
+    const entry = (
+      await request(app)
+        .post(`/api/v1/admin/races/${race.race_id}/entries`)
+        .set(ADMIN)
+        .send({ fleet_id: fleetId, boat_id: boat.boat_id })
+    ).body;
+
+    // Finish entered as a club-local wall clock 90 minutes after the gun.
+    await request(app)
+      .put(`/api/v1/admin/races/${race.race_id}/entries/${entry.entry_id}`)
+      .set(ADMIN)
+      .send({ finish_time: '2026-07-01T19:30', finish_status: 'finished' });
+
+    const scored = await request(app).post(`/api/v1/admin/races/${race.race_id}/score`).set(ADMIN);
+    expect(scored.status).toBe(200);
+    const scoredEntry = scored.body.fleets[0].entries[0];
+    expect(scoredEntry.elapsed_seconds).toBe(90 * 60);
+  });
+});
+
 describe('admin races: score / publish / revise', () => {
   test('POST /score returns scored entries with corrected times', async () => {
     const { race } = await createScoredRace(club.club_id, { publish: false });

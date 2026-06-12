@@ -66,7 +66,7 @@ router.get(
   resolveClub,
   asyncHandler(async (req, res) => {
     const data = await loadRace(req.club.club_id, req.params.id, { publishedOnly: true });
-    res.json(assembleRaceDetail(data));
+    res.json(assembleRaceDetail(data, { timeZone: req.club.timezone }));
   })
 );
 

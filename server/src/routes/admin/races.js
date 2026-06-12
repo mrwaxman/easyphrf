@@ -19,11 +19,14 @@ const {
   ensureDefaultFleet,
 } = require('../../services/raceService');
 const { scoreAndSave } = require('../../services/scoringService');
+const { zonedTimeToUtc, toDateOnly } = require('../../utils/time');
 const fleetsRouter = require('./fleets');
 const entriesRouter = require('./entries');
 
 const router = express.Router();
 
+// `start_time` is never set directly; it is derived from a submitted local
+// time-of-day (`start_time_of_day`) combined with race_date in the club tz.
 const EDITABLE = [
   'name',
   'race_date',
@@ -32,9 +35,20 @@ const EDITABLE = [
   'race_distance',
   'time_limit_secs',
   'series_id',
-  'start_time',
   'revision_notes',
 ];
+
+/**
+ * Resolve a race's start_time from a submitted local time of day. The wall
+ * clock is interpreted in the club timezone on the race's date. Simultaneous
+ * and pursuit races carry a scheduled start; self_timed never does, so any
+ * submitted value is ignored.
+ */
+function resolveStartTime({ startType, raceDate, timeOfDay, timeZone }) {
+  if (startType === 'self_timed') return null;
+  if (timeOfDay === null || timeOfDay === undefined || timeOfDay === '') return null;
+  return zonedTimeToUtc(raceDate, timeOfDay, timeZone);
+}
 
 // GET /admin/races
 router.get(
@@ -56,6 +70,12 @@ router.post(
     ensureEnum(req.body.start_type, START_TYPES, 'start_type');
     ensureEnum(req.body.self_timed_mode, SELF_TIMED_MODES, 'self_timed_mode');
     const b = req.body;
+    const startTime = resolveStartTime({
+      startType: b.start_type,
+      raceDate: b.race_date,
+      timeOfDay: b.start_time_of_day,
+      timeZone: req.club.timezone,
+    });
     const result = await db.query(
       `INSERT INTO races
          (club_id, series_id, name, race_date, start_type, self_timed_mode,
@@ -71,7 +91,7 @@ router.post(
         b.self_timed_mode ?? null,
         b.race_distance ?? null,
         b.time_limit_secs ?? null,
-        b.start_time ?? null,
+        startTime,
       ]
     );
     // Fleet setup is optional: guarantee a fleet exists behind the scenes so
@@ -86,7 +106,7 @@ router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const data = await loadRace(req.club.club_id, req.params.id);
-    res.json(assembleRaceDetail(data));
+    res.json(assembleRaceDetail(data, { timeZone: req.club.timezone }));
   })
 );
 
@@ -98,6 +118,19 @@ router.put(
     ensureEnum(req.body.self_timed_mode, SELF_TIMED_MODES, 'self_timed_mode');
     ensureEnum(req.body.status, RACE_STATUSES, 'status');
     const fields = pickDefined(req.body, [...EDITABLE, 'status']);
+
+    // A submitted time-of-day is converted to start_time in the club tz, using
+    // the race's date (from this request if changing it, else the stored one).
+    if ('start_time_of_day' in req.body) {
+      const existing = await ownedRace(req.club.club_id, req.params.id);
+      fields.start_time = resolveStartTime({
+        startType: req.body.start_type ?? existing.start_type,
+        raceDate: req.body.race_date ?? existing.race_date,
+        timeOfDay: req.body.start_time_of_day,
+        timeZone: req.club.timezone,
+      });
+    }
+
     const { clause, values, nextIndex, isEmpty } = buildUpdate(fields);
     if (isEmpty) throw badRequest('No updatable fields supplied');
     const result = await db.query(
@@ -134,7 +167,7 @@ router.post(
   asyncHandler(async (req, res) => {
     await scoreAndSave(req.club.club_id, req.params.id);
     const data = await loadRace(req.club.club_id, req.params.id);
-    res.json(assembleRaceDetail(data));
+    res.json(assembleRaceDetail(data, { timeZone: req.club.timezone }));
   })
 );
 
@@ -178,8 +211,17 @@ router.get(
     if (race.start_type !== 'pursuit') {
       throw badRequest('Start sheets are only available for pursuit races');
     }
+    // No dead-end when the start time is unset: report it so the client can
+    // collect one inline and retry, rather than throwing an error.
     if (!race.start_time) {
-      throw badRequest('Set the race start_time before generating a start sheet');
+      res.json({
+        race_id: race.race_id,
+        needs_start_time: true,
+        race_date: toDateOnly(race.race_date),
+        timezone: req.club.timezone,
+        starts: [],
+      });
+      return;
     }
 
     const entriesRes = await db.query(
@@ -216,7 +258,12 @@ router.get(
       };
     });
 
-    res.json({ race_id: race.race_id, reference_boat_id: referenceBoatId, starts: enriched });
+    res.json({
+      race_id: race.race_id,
+      reference_boat_id: referenceBoatId,
+      timezone: req.club.timezone,
+      starts: enriched,
+    });
   })
 );
 

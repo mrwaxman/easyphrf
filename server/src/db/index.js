@@ -1,6 +1,11 @@
 'use strict';
 
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
+
+// Return DATE (OID 1082) as the raw 'YYYY-MM-DD' string rather than a JS Date
+// at local midnight, which would shift the calendar day under some server
+// timezones. race_date is a pure calendar date with no time/zone meaning.
+types.setTypeParser(1082, (v) => v);
 
 // The active connection pool. In dev/prod this is a real `pg` Pool built from
 // DATABASE_URL. In tests, `configure()` swaps in a pg-mem-backed pool so the

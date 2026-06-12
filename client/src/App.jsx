@@ -13,6 +13,7 @@ import Entries from './pages/admin/Entries.jsx';
 import Results from './pages/admin/Results.jsx';
 import StartSheet from './pages/admin/StartSheet.jsx';
 import Series from './pages/admin/Series.jsx';
+import { RaceLayout } from './components/RaceLayout.jsx';
 
 /** Gate admin routes behind a Clerk session. */
 function RequireAdmin({ children }) {
@@ -48,11 +49,17 @@ export default function App() {
       <Route path="/admin" element={<RequireAdmin><Dashboard /></RequireAdmin>} />
       <Route path="/admin/boats" element={<RequireAdmin><Boats /></RequireAdmin>} />
       <Route path="/admin/races" element={<RequireAdmin><RacesList /></RequireAdmin>} />
-      <Route path="/admin/races/new" element={<RequireAdmin><RaceSetup /></RequireAdmin>} />
-      <Route path="/admin/races/:id/edit" element={<RequireAdmin><RaceSetup /></RequireAdmin>} />
-      <Route path="/admin/races/:id/entries" element={<RequireAdmin><Entries /></RequireAdmin>} />
-      <Route path="/admin/races/:id/results" element={<RequireAdmin><Results /></RequireAdmin>} />
-      <Route path="/admin/races/:id/startsheet" element={<RequireAdmin><StartSheet /></RequireAdmin>} />
+      {/* New race: shares the race sub-nav (Setup only until first save). */}
+      <Route path="/admin/races/new" element={<RequireAdmin><RaceLayout /></RequireAdmin>}>
+        <Route index element={<RaceSetup />} />
+      </Route>
+      {/* Existing race: sub-nav wraps every section so it is defined once. */}
+      <Route path="/admin/races/:id" element={<RequireAdmin><RaceLayout /></RequireAdmin>}>
+        <Route path="edit" element={<RaceSetup />} />
+        <Route path="entries" element={<Entries />} />
+        <Route path="results" element={<Results />} />
+        <Route path="startsheet" element={<StartSheet />} />
+      </Route>
       <Route path="/admin/series" element={<RequireAdmin><Series /></RequireAdmin>} />
 
       <Route path="*" element={<div className="p-8 text-center text-slate-500">Not found</div>} />

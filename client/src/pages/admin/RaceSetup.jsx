@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApi } from '../../hooks/useApi.js';
 import { useAsync } from '../../hooks/useAsync.js';
-import { AdminLayout } from '../../components/AdminLayout.jsx';
 
 const BLANK_RACE = {
   name: '',
   race_date: '',
   start_type: 'simultaneous',
   self_timed_mode: 'fully_independent',
+  start_time_of_day: '',
   race_distance: '',
   time_limit_secs: '',
   series_id: '',
@@ -36,6 +36,7 @@ export default function RaceSetup() {
         race_date: String(r.race_date || '').slice(0, 10),
         start_type: r.start_type,
         self_timed_mode: r.self_timed_mode || 'fully_independent',
+        start_time_of_day: r.start_time_of_day || '',
         race_distance: r.race_distance ?? '',
         time_limit_secs: r.time_limit_secs ?? '',
         series_id: r.series_id || '',
@@ -54,6 +55,7 @@ export default function RaceSetup() {
       race_date: race.race_date,
       start_type: race.start_type,
       self_timed_mode: race.start_type === 'self_timed' ? race.self_timed_mode : null,
+      start_time_of_day: race.start_type === 'self_timed' ? null : race.start_time_of_day || null,
       race_distance: race.race_distance === '' ? null : Number(race.race_distance),
       time_limit_secs: race.time_limit_secs === '' ? null : Number(race.time_limit_secs),
       series_id: race.series_id || null,
@@ -114,7 +116,7 @@ export default function RaceSetup() {
   };
 
   return (
-    <AdminLayout>
+    <>
       <h1 className="mb-4 text-2xl font-bold">{editing ? 'Edit Race' : 'New Race'}</h1>
       {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
 
@@ -142,6 +144,25 @@ export default function RaceSetup() {
               <option value="fully_independent">Fully independent</option>
               <option value="rc_finish_self_start">RC finish / self start</option>
             </select>
+          </label>
+        )}
+        {race.start_type !== 'self_timed' && (
+          <label className="text-sm">
+            <span className="text-slate-500">
+              Scheduled start time{race.start_type === 'pursuit' && <span className="text-red-500"> *</span>}
+            </span>
+            <input
+              type="time"
+              required={race.start_type === 'pursuit'}
+              className="mt-1 w-full rounded border px-2 py-1"
+              value={race.start_time_of_day}
+              onChange={(e) => setRace({ ...race, start_time_of_day: e.target.value })}
+            />
+            <span className="mt-1 block text-xs text-slate-400">
+              {race.start_type === 'pursuit'
+                ? 'Required — the base time pursuit offsets are computed from. Entered in the club’s local time.'
+                : 'Local time of day for the gun; you can also set or correct it on the Results page.'}
+            </span>
           </label>
         )}
         <label className="text-sm">
@@ -223,6 +244,6 @@ export default function RaceSetup() {
           <button onClick={addFleet} className="mt-2 rounded border px-3 py-1.5 text-sm hover:bg-slate-50">Add fleet</button>
         </section>
       )}
-    </AdminLayout>
+    </>
   );
 }

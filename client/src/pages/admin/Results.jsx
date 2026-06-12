@@ -1,27 +1,34 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useApi } from '../../hooks/useApi.js';
-import { AdminLayout } from '../../components/AdminLayout.jsx';
 import { RaceResultsView } from '../../components/RaceResultsView.jsx';
 import { FINISH_STATUSES, FINISH_STATUS_LABELS } from '@easyphrf/shared';
 
-// datetime-local wants "YYYY-MM-DDTHH:mm"; trim a stored ISO timestamp to fit.
-const toLocal = (v) => (v ? String(v).slice(0, 16) : '');
+const dateOnly = (v) => (v ? String(v).slice(0, 10) : '');
 
 export default function Results() {
   const { id } = useParams();
   const apiC = useApi();
   const [race, setRace] = useState(null);
   const [entries, setEntries] = useState([]);
-  const [startTime, setStartTime] = useState('');
+  const [startTime, setStartTime] = useState(''); // gun time of day (HH:mm)
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     const [r, e] = await Promise.all([apiC.getRace(id), apiC.listEntries(id)]);
     setRace(r);
-    setStartTime(toLocal(r.start_time));
-    setEntries(e);
+    // Default the gun time to the scheduled start from setup, if present.
+    setStartTime(r.start_time_of_day || '');
+    // Edit finish / self-start in club-local wall clock (server converts on save).
+    setEntries(
+      e.map((x) => ({
+        ...x,
+        finish_time: x.finish_time_local || '',
+        self_start_time: x.self_start_time_local || '',
+      }))
+    );
     if (['published', 'revised'].includes(r.status)) setPreview(r);
   }, [apiC, id]);
 
@@ -32,7 +39,10 @@ export default function Results() {
   const selfTimed = race && race.start_type === 'self_timed';
 
   const saveStart = async () => {
-    await apiC.updateRace(id, { start_time: startTime || null });
+    await apiC.updateRace(id, {
+      start_time_of_day: startTime || null,
+      race_date: dateOnly(race.race_date),
+    });
   };
 
   const updateEntry = (eid, patch) =>
@@ -46,45 +56,88 @@ export default function Results() {
     });
   };
 
-  const calculate = async () => {
+  const saveStartOnly = async () => {
+    if (busy) return;
     setError(null);
+    setBusy(true);
     try {
-      if (race.start_type === 'simultaneous' && startTime) await saveStart();
+      await saveStart();
+    } catch {
+      setError('Could not save the start time. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const calculate = async () => {
+    if (busy) return;
+    setError(null);
+    setBusy(true);
+    try {
+      if (race.start_type === 'simultaneous') await saveStart();
       await Promise.all(entries.map(persistEntry));
       const detail = await apiC.scoreRace(id);
       setPreview(detail);
-    } catch (err) {
-      setError(err.message);
+    } catch {
+      setError('Could not calculate results. Check the times and try again.');
+    } finally {
+      setBusy(false);
     }
   };
 
   const publish = async () => {
-    await apiC.publishRace(id);
-    load();
+    setError(null);
+    try {
+      await apiC.publishRace(id);
+      load();
+    } catch {
+      setError('Could not publish the race. Please try again.');
+    }
   };
 
   const revise = async () => {
     const notes = window.prompt('Revision note (required):');
     if (!notes) return;
-    await apiC.reviseRace(id, notes);
-    load();
+    try {
+      await apiC.reviseRace(id, notes);
+      load();
+    } catch {
+      setError('Could not save the revision. Please try again.');
+    }
   };
 
-  if (!race) return <AdminLayout><p className="text-slate-400">Loading…</p></AdminLayout>;
+  if (!race) return <p className="text-slate-400">Loading…</p>;
 
   return (
-    <AdminLayout>
+    <>
       <h1 className="mb-1 text-2xl font-bold">Results — {race.name}</h1>
       <p className="mb-4 text-sm text-slate-500">Status: {race.status}</p>
-      {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mb-3 rounded bg-amber-50 p-2 text-sm text-amber-700">{error}</p>}
 
       {race.start_type === 'simultaneous' && (
-        <div className="mb-4 flex items-end gap-2 rounded border bg-white p-4">
-          <label className="text-sm">
-            <span className="text-slate-500">Race start time</span>
-            <input type="datetime-local" className="mt-1 block rounded border px-2 py-1" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-          </label>
-          <button onClick={saveStart} className="rounded border px-3 py-1.5 text-sm">Save start time</button>
+        <div className="mb-4 rounded border bg-white p-4">
+          <div className="flex items-end gap-2">
+            <label className="text-sm">
+              <span className="text-slate-500">Actual start (gun) time</span>
+              <input
+                type="time"
+                className="mt-1 block rounded border px-2 py-1"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+              />
+            </label>
+            <button
+              onClick={saveStartOnly}
+              disabled={busy}
+              className="rounded border px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+            >
+              {busy ? 'Saving…' : 'Save start time'}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Elapsed time is measured from this gun time (club local). Defaults to the scheduled
+            start from setup — edit it here if the actual start differed.
+          </p>
         </div>
       )}
 
@@ -103,11 +156,11 @@ export default function Results() {
               <td className="px-2 py-1 font-medium">{e.boat_name} <span className="text-slate-400">{e.sail_number}</span></td>
               {selfTimed && (
                 <td className="px-2 py-1">
-                  <input type="datetime-local" className="rounded border px-1 py-0.5" value={toLocal(e.self_start_time)} onChange={(ev) => updateEntry(e.entry_id, { self_start_time: ev.target.value })} />
+                  <input type="datetime-local" className="rounded border px-1 py-0.5" value={e.self_start_time} onChange={(ev) => updateEntry(e.entry_id, { self_start_time: ev.target.value })} />
                 </td>
               )}
               <td className="px-2 py-1">
-                <input type="datetime-local" className="rounded border px-1 py-0.5" value={toLocal(e.finish_time)} onChange={(ev) => updateEntry(e.entry_id, { finish_time: ev.target.value })} />
+                <input type="datetime-local" className="rounded border px-1 py-0.5" value={e.finish_time} onChange={(ev) => updateEntry(e.entry_id, { finish_time: ev.target.value })} />
               </td>
               <td className="px-2 py-1">
                 <select className="rounded border px-1 py-0.5" value={e.finish_status} onChange={(ev) => updateEntry(e.entry_id, { finish_status: ev.target.value })}>
@@ -122,7 +175,9 @@ export default function Results() {
       </table>
 
       <div className="mb-6 flex gap-2">
-        <button onClick={calculate} className="rounded bg-brand-600 px-3 py-1.5 text-sm text-white">Calculate Results</button>
+        <button onClick={calculate} disabled={busy} className="rounded bg-brand-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">
+          {busy ? 'Working…' : 'Calculate Results'}
+        </button>
         {['draft', 'open'].includes(race.status) && (
           <button onClick={publish} className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white">Publish</button>
         )}
@@ -137,6 +192,6 @@ export default function Results() {
           <RaceResultsView race={preview} />
         </div>
       )}
-    </AdminLayout>
+    </>
   );
 }

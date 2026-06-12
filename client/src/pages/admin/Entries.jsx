@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useApi } from '../../hooks/useApi.js';
-import { AdminLayout } from '../../components/AdminLayout.jsx';
 
 const BLANK_FLEET = { name: '', fleet_type: 'phrf', phrf_min: '', phrf_max: '', uses_spinnaker: 'optional' };
 
@@ -72,10 +71,10 @@ export default function Entries() {
     }
   };
 
-  if (!race) return <AdminLayout><p className="text-slate-400">Loading…</p></AdminLayout>;
+  if (!race) return <p className="text-slate-400">Loading…</p>;
 
   return (
-    <AdminLayout>
+    <>
       <h1 className="mb-1 text-2xl font-bold">Entries — {race.name}</h1>
       <p className="mb-4 text-sm text-slate-500">{entries.length} entered</p>
       {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
@@ -167,6 +166,6 @@ export default function Entries() {
           })}
         </tbody>
       </table>
-    </AdminLayout>
+    </>
   );
 }

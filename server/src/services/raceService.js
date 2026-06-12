@@ -3,6 +3,7 @@
 const db = require('../db');
 const { effectiveRating } = require('../scoring');
 const { notFound } = require('../utils/errors');
+const { utcToZonedParts } = require('../utils/time');
 
 /**
  * Load a race plus its fleets and entries (entries joined to boat data), scoped
@@ -67,7 +68,7 @@ const byPlace = (a, b) => {
  * Assemble a display-ready race detail: fleets each with their (decorated,
  * place-sorted) entries, plus a combined overall PHRF standings list.
  */
-function assembleRaceDetail({ race, fleets, entries }) {
+function assembleRaceDetail({ race, fleets, entries }, { timeZone = null } = {}) {
   const decorated = entries.map(decorateEntry);
 
   const fleetsOut = fleets.map((fleet) => {
@@ -89,11 +90,17 @@ function assembleRaceDetail({ race, fleets, entries }) {
           .sort((a, b) => byPlace(a.overall_place, b.overall_place))
       : [];
 
+  // Expose the scheduled start as a club-local time of day for editing, plus
+  // the timezone, so the client never has to do zone math itself.
+  const startParts = timeZone ? utcToZonedParts(race.start_time, timeZone) : { time: null };
+
   return {
     ...race,
     fleets: fleetsOut,
     overall,
     has_multiple_phrf_fleets: phrfFleetCount > 1,
+    start_time_of_day: startParts.time,
+    timezone: timeZone,
   };
 }
 
