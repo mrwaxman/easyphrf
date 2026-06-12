@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const publicRouter = require('./routes/public');
@@ -40,6 +41,25 @@ function createApp({ enableClerk = process.env.NODE_ENV !== 'test' } = {}) {
     adminMiddleware.push(clerkMiddleware());
   }
   app.use('/api/v1/admin', ...adminMiddleware, requireAuth, adminRouter);
+
+  // In production the server also serves the built React client. This is a
+  // single-process deploy; in dev the client runs as its own Vite process, so
+  // this block is skipped entirely. Registered AFTER the API routes and BEFORE
+  // the error handler so /api/v1/* and errorHandler keep working.
+  if (process.env.NODE_ENV === 'production') {
+    // Resolve relative to this file, not cwd — PM2 launches from a different
+    // working directory. Build output lives at <repo>/client/dist.
+    const clientDist = path.resolve(__dirname, '..', '..', 'client', 'dist');
+    app.use(express.static(clientDist));
+
+    // SPA catch-all: serve index.html for any non-API GET so client-side routes
+    // (e.g. /admin/races/:id/results) deep-link on refresh. Express 5 uses
+    // path-to-regexp v8, which rejects a bare '*' — use the named wildcard.
+    app.get('/{*path}', (req, res, next) => {
+      if (req.path.startsWith('/api/')) return next();
+      res.sendFile(path.join(clientDist, 'index.html'));
+    });
+  }
 
   app.use(errorHandler);
 
