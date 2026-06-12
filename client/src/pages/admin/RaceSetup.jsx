@@ -25,6 +25,7 @@ export default function RaceSetup() {
   const [fleets, setFleets] = useState([]);
   const [newFleet, setNewFleet] = useState(BLANK_FLEET);
   const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
   const seriesState = useAsync(() => apiC.listSeries(), []);
 
   useEffect(() => {
@@ -43,9 +44,11 @@ export default function RaceSetup() {
     });
   }, [id, editing, apiC]);
 
-  const saveRace = async (e) => {
-    e.preventDefault();
-    setError(null);
+  // Persist the form as a draft (create or update) and return the race id. The
+  // server applies the default-fleet logic on save, so the race always has at
+  // least one fleet afterwards. Throws on failure so callers can decide whether
+  // to navigate.
+  const persist = async () => {
     const body = {
       name: race.name,
       race_date: race.race_date,
@@ -55,15 +58,42 @@ export default function RaceSetup() {
       time_limit_secs: race.time_limit_secs === '' ? null : Number(race.time_limit_secs),
       series_id: race.series_id || null,
     };
+    if (editing) {
+      await apiC.updateRace(id, body);
+      return id;
+    }
+    const created = await apiC.createRace(body);
+    return created.race_id;
+  };
+
+  const saveRace = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    setError(null);
+    setSaving(true);
     try {
-      if (editing) {
-        await apiC.updateRace(id, body);
-      } else {
-        const created = await apiC.createRace(body);
-        navigate(`/admin/races/${created.race_id}/edit`);
-      }
+      const raceId = await persist();
+      if (!editing) navigate(`/admin/races/${raceId}/edit`);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Save (as draft), then advance to the Entries tab for this race. Persisting
+  // first guarantees Entries has a real race_id and a fleet to attach boats to.
+  const saveAndContinue = async () => {
+    if (saving) return;
+    setError(null);
+    setSaving(true);
+    try {
+      const raceId = await persist();
+      navigate(`/admin/races/${raceId}/entries`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -131,14 +161,38 @@ export default function RaceSetup() {
             ))}
           </select>
         </label>
-        <div className="col-span-full">
-          <button type="submit" className="rounded bg-brand-600 px-3 py-1.5 text-sm text-white">Save as Draft</button>
+        <div className="col-span-full flex items-center gap-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded border px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save as Draft'}
+          </button>
+          <button
+            type="button"
+            onClick={saveAndContinue}
+            disabled={saving}
+            className="rounded bg-brand-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Next: Entries →'}
+          </button>
         </div>
       </form>
 
       {editing && (
         <section className="rounded border bg-white p-4">
-          <h2 className="mb-2 text-lg font-semibold">Fleets</h2>
+          <h2 className="text-lg font-semibold">Fleets <span className="text-sm font-normal text-slate-400">(optional)</span></h2>
+          <p className="mb-3 mt-1 text-sm text-slate-500">
+            Optional — leave this empty and we&apos;ll score everyone in one combined fleet. You can
+            add more fleets (A/B bands, one-design, etc.) at any time, even after the race is set up.
+          </p>
+          {fleets.length === 1 && (
+            <p className="mb-3 rounded bg-slate-50 p-2 text-sm text-slate-600">
+              Want to split the fleet? Add another below — e.g. an A fleet under 100 PHRF and a B
+              fleet 100+ — and you can then assign each boat to a fleet on the Entries page.
+            </p>
+          )}
           <ul className="mb-3 divide-y">
             {fleets.map((f) => (
               <li key={f.fleet_id} className="flex items-center justify-between py-2 text-sm">

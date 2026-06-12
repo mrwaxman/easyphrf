@@ -174,6 +174,82 @@ describe('admin boats', () => {
   });
 });
 
+describe('admin races: setup + default fleet', () => {
+  const NEW_RACE = { name: 'Club Race', race_date: '2026-07-01', start_type: 'simultaneous' };
+
+  test('POST with no fleets auto-creates a single combined default fleet', async () => {
+    const created = await request(app).post('/api/v1/admin/races').set(ADMIN).send(NEW_RACE);
+    expect(created.status).toBe(201);
+
+    const detail = await request(app).get(`/api/v1/admin/races/${created.body.race_id}`).set(ADMIN);
+    expect(detail.status).toBe(200);
+    expect(detail.body.fleets).toHaveLength(1);
+    expect(detail.body.fleets[0]).toMatchObject({
+      name: 'Fleet',
+      fleet_type: 'phrf',
+      phrf_min: null,
+      phrf_max: null,
+      uses_spinnaker: 'optional',
+    });
+  });
+
+  test('the race can be created and advanced without any explicit fleet setup', async () => {
+    // No fleet is required to save the race — the default makes scoring possible.
+    const created = await request(app).post('/api/v1/admin/races').set(ADMIN).send(NEW_RACE);
+    expect(created.status).toBe(201);
+    expect(created.body.status).toBe('draft');
+  });
+
+  test('PUT does not add a second default to a race that already has the default', async () => {
+    const created = await request(app).post('/api/v1/admin/races').set(ADMIN).send(NEW_RACE);
+    const raceId = created.body.race_id;
+
+    const updated = await request(app)
+      .put(`/api/v1/admin/races/${raceId}`)
+      .set(ADMIN)
+      .send({ name: 'Club Race (renamed)' });
+    expect(updated.status).toBe(200);
+
+    const detail = await request(app).get(`/api/v1/admin/races/${raceId}`).set(ADMIN);
+    expect(detail.body.fleets).toHaveLength(1);
+  });
+
+  test('an explicit fleet replaces the need for a default — save adds none', async () => {
+    const created = await request(app).post('/api/v1/admin/races').set(ADMIN).send(NEW_RACE);
+    const raceId = created.body.race_id;
+
+    // Admin adds a real fleet, then removes the auto-default.
+    const defaultFleetId = (await request(app).get(`/api/v1/admin/races/${raceId}`).set(ADMIN)).body
+      .fleets[0].fleet_id;
+    const real = await request(app)
+      .post(`/api/v1/admin/races/${raceId}/fleets`)
+      .set(ADMIN)
+      .send({ name: 'PHRF A', fleet_type: 'phrf' });
+    expect(real.status).toBe(201);
+    await request(app).delete(`/api/v1/admin/races/${raceId}/fleets/${defaultFleetId}`).set(ADMIN);
+
+    // Saving again must not re-introduce the default — a real fleet exists.
+    await request(app).put(`/api/v1/admin/races/${raceId}`).set(ADMIN).send({ name: 'AB Race' });
+
+    const detail = await request(app).get(`/api/v1/admin/races/${raceId}`).set(ADMIN);
+    expect(detail.body.fleets).toHaveLength(1);
+    expect(detail.body.fleets[0].name).toBe('PHRF A');
+  });
+
+  test('PUT on a race with an existing explicit fleet adds no default', async () => {
+    const { race } = await createScoredRace(club.club_id, { publish: false });
+    const updated = await request(app)
+      .put(`/api/v1/admin/races/${race.race_id}`)
+      .set(ADMIN)
+      .send({ name: 'Spring #1 (edited)' });
+    expect(updated.status).toBe(200);
+
+    const detail = await request(app).get(`/api/v1/admin/races/${race.race_id}`).set(ADMIN);
+    expect(detail.body.fleets).toHaveLength(1);
+    expect(detail.body.fleets[0].name).toBe('PHRF A');
+  });
+});
+
 describe('admin races: score / publish / revise', () => {
   test('POST /score returns scored entries with corrected times', async () => {
     const { race } = await createScoredRace(club.club_id, { publish: false });

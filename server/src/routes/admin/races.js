@@ -12,7 +12,12 @@ const { requireFields, ensureEnum, pickDefined } = require('../../utils/validate
 const { buildUpdate } = require('../../utils/sql');
 const { effectiveRating } = require('../../scoring');
 const { calculatePursuitStarts } = require('../../scoring');
-const { loadRace, assembleRaceDetail, ownedRace } = require('../../services/raceService');
+const {
+  loadRace,
+  assembleRaceDetail,
+  ownedRace,
+  ensureDefaultFleet,
+} = require('../../services/raceService');
 const { scoreAndSave } = require('../../services/scoringService');
 const fleetsRouter = require('./fleets');
 const entriesRouter = require('./entries');
@@ -69,6 +74,9 @@ router.post(
         b.start_time ?? null,
       ]
     );
+    // Fleet setup is optional: guarantee a fleet exists behind the scenes so
+    // entries can attach and scoring can run without any explicit setup.
+    await ensureDefaultFleet(result.rows[0].race_id);
     res.status(201).json(result.rows[0]);
   })
 );
@@ -98,6 +106,8 @@ router.put(
       [...values, req.params.id, req.club.club_id]
     );
     if (result.rows.length === 0) throw notFound('Race not found');
+    // Saving (or advancing) a race must leave it with at least one fleet.
+    await ensureDefaultFleet(req.params.id);
     res.json(result.rows[0]);
   })
 );

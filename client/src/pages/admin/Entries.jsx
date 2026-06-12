@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom';
 import { useApi } from '../../hooks/useApi.js';
 import { AdminLayout } from '../../components/AdminLayout.jsx';
 
+const BLANK_FLEET = { name: '', fleet_type: 'phrf', phrf_min: '', phrf_max: '', uses_spinnaker: 'optional' };
+
 export default function Entries() {
   const { id } = useParams();
   const apiC = useApi();
@@ -11,6 +13,8 @@ export default function Entries() {
   const [entries, setEntries] = useState([]);
   const [sel, setSel] = useState({ boat_id: '', fleet_id: '', using_spinnaker: false, phrf_override: '' });
   const [error, setError] = useState(null);
+  const [showFleetForm, setShowFleetForm] = useState(false);
+  const [newFleet, setNewFleet] = useState(BLANK_FLEET);
 
   const load = useCallback(async () => {
     const [r, b, e] = await Promise.all([apiC.getRace(id), apiC.listBoats(), apiC.listEntries(id)]);
@@ -48,6 +52,26 @@ export default function Entries() {
     load();
   };
 
+  const addFleet = async () => {
+    setError(null);
+    if (!newFleet.name) {
+      setError('Give the fleet a name');
+      return;
+    }
+    try {
+      await apiC.addFleet(id, {
+        ...newFleet,
+        phrf_min: newFleet.phrf_min === '' ? null : Number(newFleet.phrf_min),
+        phrf_max: newFleet.phrf_max === '' ? null : Number(newFleet.phrf_max),
+      });
+      setNewFleet(BLANK_FLEET);
+      setShowFleetForm(false);
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   if (!race) return <AdminLayout><p className="text-slate-400">Loading…</p></AdminLayout>;
 
   return (
@@ -75,6 +99,43 @@ export default function Entries() {
         </label>
         <input placeholder="PHRF override" className="rounded border px-2 py-1 text-sm" value={sel.phrf_override} onChange={(e) => setSel({ ...sel, phrf_override: e.target.value })} />
         <button onClick={add} className="rounded bg-brand-600 px-3 py-1 text-sm text-white">Add entry</button>
+      </div>
+
+      <div className="mb-4">
+        {!showFleetForm && (
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+            <button onClick={() => setShowFleetForm(true)} className="font-medium text-brand-600 hover:underline">
+              + Add a fleet
+            </button>
+            {(race.fleets || []).length === 1 && (
+              <span className="text-slate-500">
+                Split boats across fleets — e.g. an A fleet under 100 PHRF and a B fleet 100+.
+              </span>
+            )}
+          </div>
+        )}
+        {showFleetForm && (
+          <div className="rounded border bg-white p-4">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+              <input placeholder="Fleet name" className="rounded border px-2 py-1 text-sm" value={newFleet.name} onChange={(e) => setNewFleet({ ...newFleet, name: e.target.value })} />
+              <select className="rounded border px-2 py-1 text-sm" value={newFleet.fleet_type} onChange={(e) => setNewFleet({ ...newFleet, fleet_type: e.target.value })}>
+                <option value="phrf">PHRF</option>
+                <option value="one_design">One-design</option>
+              </select>
+              <input placeholder="PHRF min" className="rounded border px-2 py-1 text-sm" value={newFleet.phrf_min} onChange={(e) => setNewFleet({ ...newFleet, phrf_min: e.target.value })} />
+              <input placeholder="PHRF max" className="rounded border px-2 py-1 text-sm" value={newFleet.phrf_max} onChange={(e) => setNewFleet({ ...newFleet, phrf_max: e.target.value })} />
+              <select className="rounded border px-2 py-1 text-sm" value={newFleet.uses_spinnaker} onChange={(e) => setNewFleet({ ...newFleet, uses_spinnaker: e.target.value })}>
+                <option value="optional">Spinnaker optional</option>
+                <option value="allowed">Spinnaker allowed</option>
+                <option value="not_allowed">No spinnaker</option>
+              </select>
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button onClick={addFleet} className="rounded bg-brand-600 px-3 py-1 text-sm text-white">Add fleet</button>
+              <button onClick={() => { setShowFleetForm(false); setNewFleet(BLANK_FLEET); setError(null); }} className="rounded border px-3 py-1 text-sm hover:bg-slate-50">Cancel</button>
+            </div>
+          </div>
+        )}
       </div>
 
       <table className="w-full border-collapse rounded border bg-white text-sm">

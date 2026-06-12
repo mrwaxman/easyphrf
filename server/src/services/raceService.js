@@ -107,4 +107,47 @@ async function ownedRace(clubId, raceId) {
   return res.rows[0];
 }
 
-module.exports = { loadRace, assembleRaceDetail, decorateEntry, ownedRace };
+// Shape of the auto-created combined fleet. A simple one-start club race needs
+// no explicit fleet setup; this stand-in lets everyone score in one fleet.
+const DEFAULT_FLEET = {
+  name: 'Fleet',
+  fleet_type: 'phrf',
+  phrf_min: null,
+  phrf_max: null,
+  uses_spinnaker: 'optional',
+};
+
+/**
+ * Guarantee a race has at least one fleet so entries can attach and per-fleet
+ * scoring can run. Idempotent and never duplicates: inserts the combined
+ * default fleet only when the race has zero fleets. If any fleet already exists
+ * — an explicit one the admin added, or a default created earlier — it does
+ * nothing. Returns the newly created fleet row, or null when one already
+ * existed.
+ */
+async function ensureDefaultFleet(raceId) {
+  const existing = await db.query('SELECT 1 FROM fleets WHERE race_id = $1 LIMIT 1', [raceId]);
+  if (existing.rows.length > 0) return null;
+  const res = await db.query(
+    `INSERT INTO fleets (race_id, name, fleet_type, phrf_min, phrf_max, uses_spinnaker)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [
+      raceId,
+      DEFAULT_FLEET.name,
+      DEFAULT_FLEET.fleet_type,
+      DEFAULT_FLEET.phrf_min,
+      DEFAULT_FLEET.phrf_max,
+      DEFAULT_FLEET.uses_spinnaker,
+    ]
+  );
+  return res.rows[0];
+}
+
+module.exports = {
+  loadRace,
+  assembleRaceDetail,
+  decorateEntry,
+  ownedRace,
+  ensureDefaultFleet,
+  DEFAULT_FLEET,
+};
