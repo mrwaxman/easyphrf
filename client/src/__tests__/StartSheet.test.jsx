@@ -70,3 +70,24 @@ describe('StartSheet — missing start time is not a dead-end', () => {
     expect(await screen.findByText('Alpha')).toBeInTheDocument();
   });
 });
+
+describe('StartSheet — start times include seconds', () => {
+  test('renders start time with seconds when the interval is not a whole minute', async () => {
+    mockApi.startSheet.mockResolvedValue({
+      timezone: 'UTC',
+      starts: [{
+        boatId: 'b1',
+        boat_name: 'Alpha',
+        sail_number: 'USA 1',
+        phrf: 100,
+        intervalSeconds: 572,  // 9 min 32 s — not a whole minute
+        startTime: '2026-07-01T18:09:32.000Z',  // 6:09:32 PM UTC
+      }],
+    });
+    renderSheet();
+
+    await screen.findByText('Alpha');
+    // The start-time cell must contain the seconds component (e.g. 6:09:32 PM).
+    expect(screen.getByText(/\d:\d{2}:32/)).toBeInTheDocument();
+  });
+});

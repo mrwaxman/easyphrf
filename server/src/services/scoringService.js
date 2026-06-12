@@ -1,7 +1,7 @@
 'use strict';
 
 const db = require('../db');
-const { scoreRace } = require('../scoring');
+const { scoreRace, calculatePursuitStarts, effectiveRating } = require('../scoring');
 const { loadRace } = require('./raceService');
 
 /**
@@ -33,7 +33,32 @@ async function scoreAndSave(clubId, raceId) {
     rating_source: e.rating_source,
   }));
 
-  const scored = scoreRace(race, enrichedEntries, boats);
+  // For pursuit races no per-entry start_time is recorded, so elapsed time
+  // would come back null. Reconstruct each boat's computed pursuit start from
+  // the race gun time and feed those into scoring so elapsed time is shown.
+  let scoringEntries = enrichedEntries;
+  if (race.start_type === 'pursuit' && race.start_time && entries.length > 0) {
+    const pursuitBoats = entries.map((e) => ({
+      boatId: e.boat_id,
+      phrf: effectiveRating(e, { phrf_base: e.phrf_base, phrf_spinnaker: e.phrf_spinnaker }),
+    }));
+    const refBoatId = pursuitBoats.reduce(
+      (slowest, b) => (b.phrf > slowest.phrf ? b : slowest),
+      pursuitBoats[0]
+    ).boatId;
+    const opts = {};
+    if (race.expected_duration_minutes != null) {
+      opts.raceSeconds = race.expected_duration_minutes * 60;
+    }
+    const starts = calculatePursuitStarts(pursuitBoats, refBoatId, race.start_time, opts);
+    const startByBoat = new Map(starts.map((s) => [s.boatId, s.startTime]));
+    scoringEntries = enrichedEntries.map((e) => ({
+      ...e,
+      start_time: startByBoat.get(e.boat_id) ?? null,
+    }));
+  }
+
+  const scored = scoreRace(race, scoringEntries, boats);
 
   // Fleet sizes for points.
   const fleetSize = new Map();

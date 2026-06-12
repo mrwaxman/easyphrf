@@ -79,3 +79,43 @@ describe('Results — gun start time', () => {
     expect(document.querySelector('input[type="time"]')).toBeNull();
   });
 });
+
+describe('Results — date and time defaults', () => {
+  const selfTimedRace = {
+    race_id: 'race-1',
+    name: 'Club Race',
+    status: 'draft',
+    start_type: 'self_timed',
+    race_date: '2026-07-01T00:00:00.000Z',
+    start_time_of_day: null,
+  };
+
+  test('finish datetime defaults to race date at noon when no time recorded', async () => {
+    mockApi.getRace.mockResolvedValue(selfTimedRace);
+    mockApi.listEntries.mockResolvedValue([
+      { entry_id: 'e1', boat_name: 'Alpha', sail_number: 'USA 1', finish_status: 'finished',
+        finish_time_local: null, self_start_time_local: null },
+    ]);
+    renderResults();
+
+    await screen.findByText('Results — Club Race');
+    const dtInputs = document.querySelectorAll('input[type="datetime-local"]');
+    expect(dtInputs.length).toBeGreaterThan(0);
+    // Both finish and self-start should default to the race date.
+    for (const input of dtInputs) {
+      expect(input.value).toMatch(/^2026-07-01/);
+    }
+  });
+
+  test('gun time defaults to 12:00 (PM) when no start time set', async () => {
+    mockApi.getRace.mockResolvedValue({
+      race_id: 'race-1', name: 'Club Race', status: 'draft',
+      start_type: 'simultaneous', race_date: '2026-07-01T00:00:00.000Z',
+      start_time_of_day: null,
+    });
+    renderResults();
+
+    await screen.findByText('Results — Club Race');
+    expect(document.querySelector('input[type="time"]').value).toBe('12:00');
+  });
+});

@@ -36,6 +36,7 @@ const EDITABLE = [
   'time_limit_secs',
   'series_id',
   'revision_notes',
+  'expected_duration_minutes',
 ];
 
 /**
@@ -79,8 +80,8 @@ router.post(
     const result = await db.query(
       `INSERT INTO races
          (club_id, series_id, name, race_date, start_type, self_timed_mode,
-          race_distance, time_limit_secs, status, start_time)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9)
+          race_distance, time_limit_secs, status, start_time, expected_duration_minutes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10)
        RETURNING *`,
       [
         req.club.club_id,
@@ -92,6 +93,7 @@ router.post(
         b.race_distance ?? null,
         b.time_limit_secs ?? null,
         startTime,
+        b.expected_duration_minutes ?? null,
       ]
     );
     // Fleet setup is optional: guarantee a fleet exists behind the scenes so
@@ -244,8 +246,13 @@ router.get(
       referenceBoatId = boats.reduce((slowest, b) => (b.phrf > slowest.phrf ? b : slowest), boats[0]).boatId;
     }
 
-    const factor = req.query.factor ? Number(req.query.factor) : undefined;
-    const starts = calculatePursuitStarts(boats, referenceBoatId, race.start_time, { factor });
+    const opts = {};
+    if (req.query.factor) {
+      opts.factor = Number(req.query.factor);
+    } else if (race.expected_duration_minutes != null) {
+      opts.raceSeconds = race.expected_duration_minutes * 60;
+    }
+    const starts = calculatePursuitStarts(boats, referenceBoatId, race.start_time, opts);
 
     const boatById = new Map(entries.map((e) => [e.boat_id, e]));
     const enriched = starts.map((s) => {

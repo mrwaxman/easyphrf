@@ -11,13 +11,14 @@ const fmtTime = (iso, tz) =>
         timeZone: tz || undefined,
         hour: 'numeric',
         minute: '2-digit',
+        second: '2-digit',
       })
     : '—';
 
 /** Inline control shown when a pursuit race has no start time set yet. */
 function SetStartTime({ raceId, raceDate, onSaved }) {
   const apiC = useApi();
-  const [time, setTime] = useState('');
+  const [time, setTime] = useState('12:00');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 

@@ -8,10 +8,11 @@ const BLANK_RACE = {
   race_date: '',
   start_type: 'simultaneous',
   self_timed_mode: 'fully_independent',
-  start_time_of_day: '',
+  start_time_of_day: '12:00',
   race_distance: '',
   time_limit_secs: '',
   series_id: '',
+  expected_duration_minutes: '80',
 };
 const BLANK_FLEET = { name: '', fleet_type: 'phrf', phrf_min: '', phrf_max: '', uses_spinnaker: 'optional' };
 
@@ -36,10 +37,11 @@ export default function RaceSetup() {
         race_date: String(r.race_date || '').slice(0, 10),
         start_type: r.start_type,
         self_timed_mode: r.self_timed_mode || 'fully_independent',
-        start_time_of_day: r.start_time_of_day || '',
+        start_time_of_day: r.start_time_of_day || '12:00',
         race_distance: r.race_distance ?? '',
         time_limit_secs: r.time_limit_secs ?? '',
         series_id: r.series_id || '',
+        expected_duration_minutes: r.expected_duration_minutes ?? '80',
       });
       setFleets(r.fleets || []);
     });
@@ -59,6 +61,9 @@ export default function RaceSetup() {
       race_distance: race.race_distance === '' ? null : Number(race.race_distance),
       time_limit_secs: race.time_limit_secs === '' ? null : Number(race.time_limit_secs),
       series_id: race.series_id || null,
+      expected_duration_minutes: race.start_type === 'pursuit'
+        ? (race.expected_duration_minutes === '' ? 80 : Number(race.expected_duration_minutes))
+        : null,
     };
     if (editing) {
       await apiC.updateRace(id, body);
@@ -162,6 +167,21 @@ export default function RaceSetup() {
               {race.start_type === 'pursuit'
                 ? 'Required — the base time pursuit offsets are computed from. Entered in the club’s local time.'
                 : 'Local time of day for the gun; you can also set or correct it on the Results page.'}
+            </span>
+          </label>
+        )}
+        {race.start_type === 'pursuit' && (
+          <label className="text-sm">
+            <span className="text-slate-500">Expected race duration (minutes)</span>
+            <input
+              type="number"
+              min="1"
+              className="mt-1 w-full rounded border px-2 py-1"
+              value={race.expected_duration_minutes}
+              onChange={(e) => setRace({ ...race, expected_duration_minutes: e.target.value })}
+            />
+            <span className="mt-1 block text-xs text-slate-400">
+              Used to scale pursuit start delays. Default is 80 minutes.
             </span>
           </label>
         )}

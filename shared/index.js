@@ -26,7 +26,7 @@ const NON_FINISH_STATUSES = ['dnf', 'dns', 'dsq', 'raf'];
 const TOT_BASE = 650;
 
 // Default pursuit-start scaling: spread the fleet across a nominal 2-hour race.
-const DEFAULT_PURSUIT_RACE_SECONDS = 2 * 60 * 60;
+const DEFAULT_PURSUIT_RACE_SECONDS = 80 * 60;
 
 /** Human-readable labels for finish statuses (used in tables / PDFs). */
 const FINISH_STATUS_LABELS = {

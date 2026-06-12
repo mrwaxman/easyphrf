@@ -134,3 +134,62 @@ describe('RaceSetup — scheduled start time', () => {
     );
   });
 });
+
+describe('RaceSetup — expected duration (pursuit only)', () => {
+  test('expected duration field is hidden for simultaneous and self_timed', () => {
+    renderSetup();
+    expect(screen.queryByLabelText(/expected race duration/i)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Start type'), { target: { value: 'self_timed' } });
+    expect(screen.queryByLabelText(/expected race duration/i)).not.toBeInTheDocument();
+  });
+
+  test('expected duration field appears for pursuit with default 80', () => {
+    renderSetup();
+    fireEvent.change(screen.getByLabelText('Start type'), { target: { value: 'pursuit' } });
+
+    const field = screen.getByLabelText(/expected race duration/i);
+    expect(field).toBeInTheDocument();
+    expect(field.value).toBe('80');
+  });
+
+  test('default 80-minute expected duration is sent to the API for pursuit', async () => {
+    mockApi.createRace.mockResolvedValue({ race_id: 'race-1' });
+    renderSetup();
+
+    fireEvent.change(screen.getByLabelText('Start type'), { target: { value: 'pursuit' } });
+    fireEvent.click(screen.getByRole('button', { name: /Next: Entries/i }));
+
+    await waitFor(() => expect(mockApi.createRace).toHaveBeenCalledTimes(1));
+    expect(mockApi.createRace).toHaveBeenCalledWith(
+      expect.objectContaining({ start_type: 'pursuit', expected_duration_minutes: 80 })
+    );
+  });
+
+  test('custom expected duration is sent when changed', async () => {
+    mockApi.createRace.mockResolvedValue({ race_id: 'race-1' });
+    renderSetup();
+
+    fireEvent.change(screen.getByLabelText('Start type'), { target: { value: 'pursuit' } });
+    fireEvent.change(screen.getByLabelText(/expected race duration/i), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: /Next: Entries/i }));
+
+    await waitFor(() => expect(mockApi.createRace).toHaveBeenCalledTimes(1));
+    expect(mockApi.createRace).toHaveBeenCalledWith(
+      expect.objectContaining({ expected_duration_minutes: 60 })
+    );
+  });
+
+  test('non-pursuit race sends null for expected_duration_minutes', async () => {
+    mockApi.createRace.mockResolvedValue({ race_id: 'race-1' });
+    renderSetup();
+
+    // simultaneous is the default start type
+    fireEvent.click(screen.getByRole('button', { name: /Next: Entries/i }));
+
+    await waitFor(() => expect(mockApi.createRace).toHaveBeenCalledTimes(1));
+    expect(mockApi.createRace).toHaveBeenCalledWith(
+      expect.objectContaining({ expected_duration_minutes: null })
+    );
+  });
+});

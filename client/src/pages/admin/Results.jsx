@@ -19,14 +19,15 @@ export default function Results() {
   const load = useCallback(async () => {
     const [r, e] = await Promise.all([apiC.getRace(id), apiC.listEntries(id)]);
     setRace(r);
+    const raceDate = String(r.race_date).slice(0, 10);
     // Default the gun time to the scheduled start from setup, if present.
-    setStartTime(r.start_time_of_day || '');
+    setStartTime(r.start_time_of_day || '12:00');
     // Edit finish / self-start in club-local wall clock (server converts on save).
     setEntries(
       e.map((x) => ({
         ...x,
-        finish_time: x.finish_time_local || '',
-        self_start_time: x.self_start_time_local || '',
+        finish_time: x.finish_time_local || `${raceDate}T12:00`,
+        self_start_time: x.self_start_time_local || `${raceDate}T12:00`,
       }))
     );
     if (['published', 'revised'].includes(r.status)) setPreview(r);

@@ -4,15 +4,6 @@ import { useAsync } from '../../hooks/useAsync.js';
 import { AdminLayout } from '../../components/AdminLayout.jsx';
 import { RaceStatusBadge } from '../../components/Badges.jsx';
 
-function Stat({ label, value }) {
-  return (
-    <div className="rounded border bg-white p-4">
-      <p className="text-3xl font-bold text-brand-700">{value}</p>
-      <p className="text-sm text-slate-500">{label}</p>
-    </div>
-  );
-}
-
 export default function Dashboard() {
   const apiC = useApi();
   const boats = useAsync(() => apiC.listBoats(), []);
@@ -21,10 +12,10 @@ export default function Dashboard() {
 
   const today = new Date().toISOString().slice(0, 10);
   const activeBoats = (boats.data || []).filter((b) => b.active).length;
-  const upcoming = (races.data || []).filter(
+  const upcomingRaces = (races.data || []).filter(
     (r) => String(r.race_date).slice(0, 10) >= today && ['draft', 'open'].includes(r.status)
-  ).length;
-  const activeSeries = (series.data || []).filter((s) => s.active).length;
+  );
+  const activeSeriesList = (series.data || []).filter((s) => s.active);
   const recent = (races.data || [])
     .filter((r) => ['published', 'revised'].includes(r.status))
     .slice(0, 5);
@@ -33,9 +24,43 @@ export default function Dashboard() {
     <AdminLayout>
       <h1 className="mb-4 text-2xl font-bold">Dashboard</h1>
       <div className="mb-6 grid grid-cols-3 gap-4">
-        <Stat label="Active boats" value={activeBoats} />
-        <Stat label="Upcoming races" value={upcoming} />
-        <Stat label="Active series" value={activeSeries} />
+        <Link
+          to="/admin/boats"
+          className="block rounded border bg-white p-4 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        >
+          <p className="text-3xl font-bold text-brand-700">{activeBoats}</p>
+          <p className="text-sm text-slate-500">Active boats</p>
+        </Link>
+        <div className="rounded border bg-white p-4">
+          <p className="text-3xl font-bold text-brand-700">{upcomingRaces.length}</p>
+          <p className="text-sm text-slate-500">Upcoming races</p>
+          <ul className="mt-2 space-y-1">
+            {upcomingRaces.map((r) => (
+              <Link
+                key={r.race_id}
+                to={`/admin/races/${r.race_id}/entries`}
+                className="block truncate text-xs text-brand-700 hover:underline focus:underline focus:outline-none"
+              >
+                {r.name}
+              </Link>
+            ))}
+          </ul>
+        </div>
+        <div className="rounded border bg-white p-4">
+          <p className="text-3xl font-bold text-brand-700">{activeSeriesList.length}</p>
+          <p className="text-sm text-slate-500">Active series</p>
+          <ul className="mt-2 space-y-1">
+            {activeSeriesList.map((s) => (
+              <Link
+                key={s.series_id}
+                to={`/series/${s.series_id}`}
+                className="block truncate text-xs text-brand-700 hover:underline focus:underline focus:outline-none"
+              >
+                {s.name}
+              </Link>
+            ))}
+          </ul>
+        </div>
       </div>
 
       <div className="mb-6 flex gap-3">
