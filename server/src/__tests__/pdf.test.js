@@ -42,7 +42,12 @@ describe('PDF import endpoint', () => {
       .attach('file', Buffer.from('%PDF-1.4 dummy'), 'fleet.pdf');
     expect(res.status).toBe(200);
     expect(res.body.records).toHaveLength(2);
-    expect(res.body.records[0].sail_number).toBe('USA 12345');
+    expect(res.body.records[0]).toMatchObject({
+      sail_number: 'USA 12345',
+      phrf_base: 72, // PDF Spin column (faster)
+      spinnaker_offset: 12, // PDF Base 84 - Spin 72
+      phrf_spinnaker: 84, // base + offset (non-spin)
+    });
   });
 
   test('POST /import-pdf without a file returns 400', async () => {
@@ -63,6 +68,12 @@ describe('PDF import endpoint', () => {
     expect(confirm.status).toBe(200);
     expect(confirm.body.inserted).toHaveLength(2);
     expect(confirm.body.inserted[0].rating_source).toBe('official');
+    // Stored boat follows the convention: phrf_spinnaker = base + offset.
+    expect(confirm.body.inserted[0]).toMatchObject({
+      phrf_base: 72,
+      spinnaker_offset: 12,
+      phrf_spinnaker: 84,
+    });
     expect(confirm.body.conflicts).toHaveLength(0);
 
     // Re-importing the same records yields conflicts, no new inserts.

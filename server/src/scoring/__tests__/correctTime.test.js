@@ -30,18 +30,20 @@ describe('correctTimeToT', () => {
 });
 
 describe('effectiveRating', () => {
-  const boat = { phrf_base: 120, phrf_spinnaker: 105 };
+  // New convention: phrf_base is the faster spinnaker rating; phrf_spinnaker
+  // (= phrf_base + spinnaker_offset) is the slower non-spin rating.
+  const boat = { phrf_base: 120, spinnaker_offset: 15, phrf_spinnaker: 135 };
 
   test('returns the override when one is set (even with a spinnaker flown)', () => {
     expect(effectiveRating({ phrf_override: 99, using_spinnaker: true }, boat)).toBe(99);
     expect(effectiveRating({ phrf_override: 0, using_spinnaker: false }, boat)).toBe(0);
   });
 
-  test('returns the spinnaker rating when flying a kite and no override', () => {
-    expect(effectiveRating({ phrf_override: null, using_spinnaker: true }, boat)).toBe(105);
+  test('returns phrf_base (the spinnaker rating) when flying a kite and no override', () => {
+    expect(effectiveRating({ phrf_override: null, using_spinnaker: true }, boat)).toBe(120);
   });
 
-  test('returns the base rating when not flying a kite and no override', () => {
-    expect(effectiveRating({ phrf_override: null, using_spinnaker: false }, boat)).toBe(120);
+  test('returns phrf_spinnaker (the non-spin rating) when not flying a kite and no override', () => {
+    expect(effectiveRating({ phrf_override: null, using_spinnaker: false }, boat)).toBe(135);
   });
 });

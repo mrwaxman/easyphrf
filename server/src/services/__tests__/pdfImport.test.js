@@ -14,16 +14,22 @@ describe('parseRecordsFromText', () => {
   test('extracts data rows and ignores headers/footers', () => {
     const { records, unparsedLines } = parseRecordsFromText(SAMPLE);
     expect(records).toHaveLength(2);
+    // PDF "Base 84  Spin 72" maps to our convention as phrf_base 72 (the faster
+    // spinnaker rating), phrf_spinnaker 84 (non-spin), offset 12.
     expect(records[0]).toEqual({
       sail_number: 'USA 12345',
       boat_name: 'Blue Streak',
       model: 'J/105',
       skipper_name: 'Jane Skipper',
-      phrf_base: 84,
-      phrf_spinnaker: 72,
+      phrf_base: 72,
+      spinnaker_offset: 12,
+      phrf_spinnaker: 84,
     });
     expect(records[1].sail_number).toBe('USA 678');
-    expect(records[1].phrf_base).toBe(120);
+    // PDF "Base 120  Spin 108" -> phrf_base 108, offset 12, phrf_spinnaker 120.
+    expect(records[1].phrf_base).toBe(108);
+    expect(records[1].spinnaker_offset).toBe(12);
+    expect(records[1].phrf_spinnaker).toBe(120);
     // The title, column header, and notes line are not data rows.
     expect(unparsedLines.length).toBe(3);
   });
@@ -40,8 +46,14 @@ describe('rowToRecord', () => {
   test('rejects rows whose trailing columns are not integer ratings', () => {
     expect(rowToRecord(['USA 1', 'Boat', 'Model', 'Skip', 'fast', 'slow'])).toBeNull();
   });
-  test('accepts a well-formed row', () => {
+  test('accepts a well-formed row and derives base/offset from the PDF columns', () => {
+    // Columns are "Base 100  Spin 88": phrf_base 88, offset 12, phrf_spinnaker 100.
     const r = rowToRecord(['USA 1', 'Boat', 'Model', 'Skip', '100', '88']);
-    expect(r).toMatchObject({ sail_number: 'USA 1', phrf_base: 100, phrf_spinnaker: 88 });
+    expect(r).toMatchObject({
+      sail_number: 'USA 1',
+      phrf_base: 88,
+      spinnaker_offset: 12,
+      phrf_spinnaker: 100,
+    });
   });
 });

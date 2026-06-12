@@ -12,13 +12,14 @@ const { parsePhrfPdf, confirmImport } = require('../../services/pdfImport');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+// phrf_spinnaker is intentionally NOT editable: it is always computed
+// server-side as phrf_base + spinnaker_offset, never user-supplied.
 const EDITABLE = [
   'sail_number',
   'boat_name',
   'model',
   'skipper_name',
   'phrf_base',
-  'phrf_spinnaker',
   'spinnaker_offset',
   'rating_source',
   'rating_notes',
@@ -41,9 +42,12 @@ router.get(
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    requireFields(req.body, ['sail_number', 'boat_name', 'skipper_name', 'phrf_base', 'phrf_spinnaker']);
+    requireFields(req.body, ['sail_number', 'boat_name', 'skipper_name', 'phrf_base']);
     ensureEnum(req.body.rating_source, RATING_SOURCES, 'rating_source');
     const b = req.body;
+    const phrfBase = Number(b.phrf_base);
+    const spinnakerOffset = b.spinnaker_offset != null ? Number(b.spinnaker_offset) : 0;
+    const phrfSpinnaker = phrfBase + spinnakerOffset;
     const result = await db.query(
       `INSERT INTO boats
          (club_id, sail_number, boat_name, model, skipper_name, phrf_base,
@@ -56,9 +60,9 @@ router.post(
         b.boat_name,
         b.model ?? null,
         b.skipper_name,
-        b.phrf_base,
-        b.phrf_spinnaker,
-        b.spinnaker_offset ?? 0,
+        phrfBase,
+        phrfSpinnaker,
+        spinnakerOffset,
         b.rating_source ?? 'official',
         b.rating_notes ?? null,
       ]
@@ -73,9 +77,25 @@ router.put(
   asyncHandler(async (req, res) => {
     ensureEnum(req.body.rating_source, RATING_SOURCES, 'rating_source');
     const fields = pickDefined(req.body, EDITABLE);
-    const { clause, values, nextIndex, isEmpty } = buildUpdate(fields);
-    if (isEmpty) throw badRequest('No updatable fields supplied');
+    if (Object.keys(fields).length === 0) throw badRequest('No updatable fields supplied');
 
+    // Whenever phrf_base or spinnaker_offset changes, recompute phrf_spinnaker
+    // server-side. A partial update may touch only one of them, so fall back to
+    // the stored value for the other.
+    if (fields.phrf_base !== undefined || fields.spinnaker_offset !== undefined) {
+      const existing = await db.query(
+        'SELECT phrf_base, spinnaker_offset FROM boats WHERE boat_id = $1 AND club_id = $2',
+        [req.params.id, req.club.club_id]
+      );
+      if (existing.rows.length === 0) throw notFound('Boat not found');
+      const phrfBase = Number(fields.phrf_base ?? existing.rows[0].phrf_base);
+      const spinnakerOffset = Number(fields.spinnaker_offset ?? existing.rows[0].spinnaker_offset);
+      fields.phrf_base = phrfBase;
+      fields.spinnaker_offset = spinnakerOffset;
+      fields.phrf_spinnaker = phrfBase + spinnakerOffset;
+    }
+
+    const { clause, values, nextIndex } = buildUpdate(fields);
     const result = await db.query(
       `UPDATE boats SET ${clause}, updated_at = NOW()
         WHERE boat_id = $${nextIndex} AND club_id = $${nextIndex + 1}

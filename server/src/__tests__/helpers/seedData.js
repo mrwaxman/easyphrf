@@ -13,14 +13,16 @@ async function createBoat(clubId, overrides = {}) {
     skipper_name: 'Skipper',
     model: null,
     phrf_base: 100,
-    phrf_spinnaker: 85,
+    spinnaker_offset: 0,
     rating_source: 'official',
     ...overrides,
   };
+  // phrf_spinnaker is always derived, mirroring the API contract.
+  const phrfSpinnaker = b.phrf_base + b.spinnaker_offset;
   const res = await db.query(
-    `INSERT INTO boats (club_id, sail_number, boat_name, model, skipper_name, phrf_base, phrf_spinnaker, rating_source)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [clubId, b.sail_number, b.boat_name, b.model, b.skipper_name, b.phrf_base, b.phrf_spinnaker, b.rating_source]
+    `INSERT INTO boats (club_id, sail_number, boat_name, model, skipper_name, phrf_base, spinnaker_offset, phrf_spinnaker, rating_source)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [clubId, b.sail_number, b.boat_name, b.model, b.skipper_name, b.phrf_base, b.spinnaker_offset, phrfSpinnaker, b.rating_source]
   );
   return res.rows[0];
 }
@@ -62,7 +64,6 @@ async function createScoredRace(
       boat_name: s.name,
       skipper_name: s.skip,
       phrf_base: s.phrf,
-      phrf_spinnaker: s.phrf - 15,
       rating_source: s.source || 'official',
     });
     boats.push(boat);

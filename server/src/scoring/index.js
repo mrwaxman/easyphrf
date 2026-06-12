@@ -44,14 +44,19 @@ function correctTimeToT(elapsedSeconds, phrfRating) {
 
 /**
  * The rating to use for an entry: an explicit override wins; otherwise the
- * boat's spinnaker rating when flying a kite, else its base rating.
+ * boat's base (spinnaker) rating when flying a kite, else its non-spin rating.
+ *
+ * Per the rating convention, phrf_base is the faster spinnaker rating and
+ * phrf_spinnaker (= phrf_base + spinnaker_offset) is the slower non-spinnaker
+ * rating. So a boat flying a kite is scored on phrf_base, and one without on
+ * phrf_spinnaker.
  */
 function effectiveRating(entry, boat) {
   if (entry.phrf_override !== null && entry.phrf_override !== undefined) {
     return entry.phrf_override;
   }
-  if (entry.using_spinnaker) return boat.phrf_spinnaker;
-  return boat.phrf_base;
+  if (entry.using_spinnaker) return boat.phrf_base;
+  return boat.phrf_spinnaker;
 }
 
 // --- 2c. Elapsed time --------------------------------------------------------

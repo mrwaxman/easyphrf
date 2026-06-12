@@ -22,10 +22,13 @@ function makeEntry(id, { fleet = 'F', type = 'phrf', phrf, elapsed, status = 'fi
       phrf_override: override,
       using_spinnaker: spin,
     },
+    // `phrf` is the rating these specs expect to be scored on. Entries default
+    // to non-spin, which is scored on phrf_spinnaker, so phrf_spinnaker = phrf
+    // and phrf_base is the faster spinnaker rating (15 lower, offset 15).
     boat: {
       boat_id: `boat-${id}`,
-      phrf_base: phrf,
-      phrf_spinnaker: phrf - 15,
+      phrf_base: phrf - 15,
+      phrf_spinnaker: phrf,
       rating_source: source,
     },
   };
@@ -164,6 +167,18 @@ describe('scoreRace — simultaneous start', () => {
     expect(withoutOverride.override_applied).toBe(false);
   });
 
+  test('flying a spinnaker is scored on phrf_base, not phrf_spinnaker', () => {
+    // makeEntry sets phrf_base = phrf - 15, phrf_spinnaker = phrf. With a kite
+    // flown, the faster phrf_base (75) is used instead of phrf_spinnaker (90).
+    const spun = runRace([['A', { phrf: 90, elapsed: 3600, spin: true }]]).byId.A;
+    const plain = runRace([['A', { phrf: 90, elapsed: 3600 }]]).byId.A;
+
+    expect(spun.rating_used).toBe(75);
+    expect(plain.rating_used).toBe(90);
+    expect(spun.corrected_seconds).toBe(Math.round((3600 * 650) / 725));
+    expect(plain.corrected_seconds).toBe(Math.round((3600 * 650) / 740));
+  });
+
   test('inferred ratings are flagged in the output', () => {
     const { byId } = runRace([
       ['A', { phrf: 90, elapsed: 3600, source: 'inferred' }],
@@ -189,7 +204,8 @@ describe('scoreRace — other start types', () => {
       using_spinnaker: false,
       phrf_override: null,
     };
-    const boat = { boat_id: 'boat-A', phrf_base: 100, phrf_spinnaker: 85, rating_source: 'official' };
+    // Non-spin entry => scored on phrf_spinnaker (100).
+    const boat = { boat_id: 'boat-A', phrf_base: 85, phrf_spinnaker: 100, rating_source: 'official' };
     const [scored] = scoreRace(race, [entry], [boat]);
     expect(scored.elapsed_seconds).toBe(3600);
     expect(scored.corrected_seconds).toBe(Math.round((3600 * 650) / 750));
@@ -209,7 +225,7 @@ describe('scoreRace — other start types', () => {
       using_spinnaker: false,
       phrf_override: null,
     };
-    const boat = { boat_id: 'boat-A', phrf_base: 120, phrf_spinnaker: 105, rating_source: 'official' };
+    const boat = { boat_id: 'boat-A', phrf_base: 105, phrf_spinnaker: 120, rating_source: 'official' };
     const [scored] = scoreRace(race, [entry], [boat]);
     expect(scored.elapsed_seconds).toBe(5000);
   });

@@ -11,7 +11,7 @@ const EMPTY = {
   model: '',
   skipper_name: '',
   phrf_base: '',
-  phrf_spinnaker: '',
+  spinnaker_offset: '',
   rating_source: 'official',
 };
 
@@ -27,10 +27,12 @@ export default function Boats() {
   const save = async (e) => {
     e.preventDefault();
     setError(null);
+    // phrf_spinnaker is never sent: the server computes it as
+    // phrf_base + spinnaker_offset.
     const body = {
       ...form,
       phrf_base: Number(form.phrf_base),
-      phrf_spinnaker: Number(form.phrf_spinnaker),
+      spinnaker_offset: Number(form.spinnaker_offset) || 0,
     };
     try {
       if (editId) await apiC.updateBoat(editId, body);
@@ -95,14 +97,15 @@ export default function Boats() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase text-slate-500">
-                <th>Sail</th><th>Boat</th><th>Model</th><th>Skipper</th><th>Base</th><th>Spin</th>
+                <th>Sail</th><th>Boat</th><th>Model</th><th>Skipper</th><th>Base</th><th>NS Offset</th><th>NS Rating</th>
               </tr>
             </thead>
             <tbody>
               {importRows.map((r, i) => (
                 <tr key={i} className="border-t">
                   <td>{r.sail_number}</td><td>{r.boat_name}</td><td>{r.model}</td>
-                  <td>{r.skipper_name}</td><td>{r.phrf_base}</td><td>{r.phrf_spinnaker}</td>
+                  <td>{r.skipper_name}</td><td>{r.phrf_base}</td><td>{r.spinnaker_offset}</td>
+                  <td>{r.phrf_base + r.spinnaker_offset}</td>
                 </tr>
               ))}
             </tbody>
@@ -126,7 +129,7 @@ export default function Boats() {
             ['model', 'Model'],
             ['skipper_name', 'Skipper'],
             ['phrf_base', 'Base PHRF'],
-            ['phrf_spinnaker', 'Spinnaker PHRF'],
+            ['spinnaker_offset', 'Non-Spin Offset'],
           ].map(([key, label]) => (
             <label key={key} className="text-sm">
               <span className="text-slate-500">{label}</span>
@@ -176,7 +179,8 @@ export default function Boats() {
                 <th className="px-2 py-1">Model</th>
                 <th className="px-2 py-1">Skipper</th>
                 <th className="px-2 py-1">Base</th>
-                <th className="px-2 py-1">Spin</th>
+                <th className="px-2 py-1">NS Offset</th>
+                <th className="px-2 py-1">NS Rating</th>
                 <th className="px-2 py-1">Source</th>
                 <th className="px-2 py-1"></th>
               </tr>
@@ -189,7 +193,8 @@ export default function Boats() {
                   <td className="px-2 py-1">{b.model}</td>
                   <td className="px-2 py-1">{b.skipper_name}</td>
                   <td className="px-2 py-1">{b.phrf_base}</td>
-                  <td className="px-2 py-1">{b.phrf_spinnaker}</td>
+                  <td className="px-2 py-1">{b.spinnaker_offset}</td>
+                  <td className="px-2 py-1">{b.phrf_base + b.spinnaker_offset}</td>
                   <td className="px-2 py-1">
                     {b.rating_source === 'inferred' ? (
                       <span className="text-amber-600">Inferred<InferredBadge /></span>
@@ -208,7 +213,7 @@ export default function Boats() {
                           model: b.model || '',
                           skipper_name: b.skipper_name,
                           phrf_base: b.phrf_base,
-                          phrf_spinnaker: b.phrf_spinnaker,
+                          spinnaker_offset: b.spinnaker_offset,
                           rating_source: b.rating_source,
                         });
                       }}

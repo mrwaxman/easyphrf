@@ -86,14 +86,43 @@ describe('admin auth', () => {
 });
 
 describe('admin boats', () => {
-  test('POST creates a boat and returns it', async () => {
+  test('POST creates a boat and computes phrf_spinnaker = base + offset', async () => {
     const res = await request(app)
       .post('/api/v1/admin/boats')
       .set(ADMIN)
-      .send({ sail_number: 'USA 99', boat_name: 'Test', skipper_name: 'Tester', phrf_base: 100, phrf_spinnaker: 85 });
+      .send({ sail_number: 'USA 99', boat_name: 'Test', skipper_name: 'Tester', phrf_base: 100, spinnaker_offset: 5 });
     expect(res.status).toBe(201);
     expect(res.body.boat_id).toBeDefined();
     expect(res.body.rating_source).toBe('official');
+    expect(res.body.phrf_base).toBe(100);
+    expect(res.body.spinnaker_offset).toBe(5);
+    expect(res.body.phrf_spinnaker).toBe(105);
+  });
+
+  test('POST defaults spinnaker_offset to 0 so phrf_spinnaker equals base', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/boats')
+      .set(ADMIN)
+      .send({ sail_number: 'USA 98', boat_name: 'NoOffset', skipper_name: 'Tester', phrf_base: 120 });
+    expect(res.status).toBe(201);
+    expect(res.body.spinnaker_offset).toBe(0);
+    expect(res.body.phrf_spinnaker).toBe(120);
+  });
+
+  test('POST ignores a user-supplied phrf_spinnaker and computes it instead', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/boats')
+      .set(ADMIN)
+      .send({
+        sail_number: 'USA 97',
+        boat_name: 'Sneaky',
+        skipper_name: 'Tester',
+        phrf_base: 100,
+        spinnaker_offset: 6,
+        phrf_spinnaker: 999,
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.phrf_spinnaker).toBe(106);
   });
 
   test('POST with missing fields returns 400', async () => {
@@ -102,7 +131,7 @@ describe('admin boats', () => {
     expect(res.body.details.missing).toContain('sail_number');
   });
 
-  test('PUT updates a boat', async () => {
+  test('PUT updates phrf_base and recomputes phrf_spinnaker', async () => {
     const boat = await createBoat(club.club_id, { sail_number: 'USA 7' });
     const res = await request(app)
       .put(`/api/v1/admin/boats/${boat.boat_id}`)
@@ -110,7 +139,30 @@ describe('admin boats', () => {
       .send({ phrf_base: 111, rating_notes: 'measured' });
     expect(res.status).toBe(200);
     expect(res.body.phrf_base).toBe(111);
+    // boat was seeded with spinnaker_offset 0, so phrf_spinnaker tracks base.
+    expect(res.body.phrf_spinnaker).toBe(111);
     expect(res.body.rating_notes).toBe('measured');
+  });
+
+  test('PUT updating spinnaker_offset alone recomputes phrf_spinnaker from stored base', async () => {
+    const boat = await createBoat(club.club_id, { sail_number: 'USA 6', phrf_base: 100 });
+    const res = await request(app)
+      .put(`/api/v1/admin/boats/${boat.boat_id}`)
+      .set(ADMIN)
+      .send({ spinnaker_offset: 8 });
+    expect(res.status).toBe(200);
+    expect(res.body.spinnaker_offset).toBe(8);
+    expect(res.body.phrf_spinnaker).toBe(108);
+  });
+
+  test('PUT ignores a user-supplied phrf_spinnaker', async () => {
+    const boat = await createBoat(club.club_id, { sail_number: 'USA 5', phrf_base: 100 });
+    const res = await request(app)
+      .put(`/api/v1/admin/boats/${boat.boat_id}`)
+      .set(ADMIN)
+      .send({ spinnaker_offset: 4, phrf_spinnaker: 999 });
+    expect(res.status).toBe(200);
+    expect(res.body.phrf_spinnaker).toBe(104);
   });
 
   test('DELETE soft-deletes (deactivates) a boat', async () => {
@@ -199,7 +251,7 @@ describe('pursuit start sheet', () => {
       )
     ).rows[0];
     for (const [sail, phrf] of [['USA 10', 60], ['USA 11', 150]]) {
-      const boat = await createBoat(club.club_id, { sail_number: sail, phrf_base: phrf, phrf_spinnaker: phrf });
+      const boat = await createBoat(club.club_id, { sail_number: sail, phrf_base: phrf });
       await db.query(`INSERT INTO race_entries (race_id, fleet_id, boat_id) VALUES ($1,$2,$3)`, [
         race.race_id,
         fleet.fleet_id,

@@ -65,9 +65,18 @@ const isInt = (s) => /^-?\d+$/.test(s);
 /** Map a split row to a record, or null if it is not a data row. */
 function rowToRecord(cols) {
   if (cols.length < 5) return null;
-  const spin = cols[cols.length - 1];
-  const base = cols[cols.length - 2];
-  if (!isInt(base) || !isInt(spin)) return null;
+  // SoCal fleet lists print the two ratings as "Base  Spin": the PDF "Base"
+  // column is the non-spinnaker (slower) rating and the "Spin" column is the
+  // with-spinnaker (faster) rating. Our convention is the reverse — phrf_base is
+  // the faster spinnaker rating and phrf_spinnaker (= phrf_base + spinnaker_offset)
+  // is the slower non-spin rating. So the PDF's Spin column becomes phrf_base and
+  // the offset is the gap up to its Base column.
+  const pdfSpin = cols[cols.length - 1]; // with-spinnaker rating (faster)
+  const pdfBase = cols[cols.length - 2]; // non-spinnaker rating (slower)
+  if (!isInt(pdfSpin) || !isInt(pdfBase)) return null;
+
+  const phrf_base = parseInt(pdfSpin, 10);
+  const spinnaker_offset = parseInt(pdfBase, 10) - phrf_base;
 
   const sail_number = cols[0];
   // Header rows often start with a non-sail label; require the sail token to
@@ -83,8 +92,9 @@ function rowToRecord(cols) {
     boat_name,
     model,
     skipper_name,
-    phrf_base: parseInt(base, 10),
-    phrf_spinnaker: parseInt(spin, 10),
+    phrf_base,
+    spinnaker_offset,
+    phrf_spinnaker: phrf_base + spinnaker_offset,
   };
 }
 
@@ -108,12 +118,16 @@ async function confirmImport(clubId, records) {
       conflicts.push({ incoming: r, existing: existing.rows[0] });
       continue;
     }
+    // phrf_spinnaker is always derived from base + offset, never trusted from
+    // the (RC-editable) preview payload.
+    const spinnakerOffset = r.spinnaker_offset != null ? Number(r.spinnaker_offset) : 0;
+    const phrfSpinnaker = Number(r.phrf_base) + spinnakerOffset;
     const res = await db.query(
       `INSERT INTO boats
-         (club_id, sail_number, boat_name, model, skipper_name, phrf_base, phrf_spinnaker, rating_source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'official')
+         (club_id, sail_number, boat_name, model, skipper_name, phrf_base, spinnaker_offset, phrf_spinnaker, rating_source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'official')
        RETURNING *`,
-      [clubId, r.sail_number, r.boat_name, r.model ?? null, r.skipper_name, r.phrf_base, r.phrf_spinnaker]
+      [clubId, r.sail_number, r.boat_name, r.model ?? null, r.skipper_name, r.phrf_base, spinnakerOffset, phrfSpinnaker]
     );
     inserted.push(res.rows[0]);
   }
