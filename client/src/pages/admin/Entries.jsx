@@ -20,6 +20,10 @@ export default function Entries() {
     setRace(r);
     setBoats(b.filter((x) => x.active));
     setEntries(e);
+    // Default fleet_id to the first (or only) fleet whenever it's unset.
+    if ((r.fleets || []).length > 0) {
+      setSel((prev) => ({ ...prev, fleet_id: prev.fleet_id || r.fleets[0].fleet_id }));
+    }
   }, [apiC, id]);
 
   useEffect(() => {
@@ -39,7 +43,7 @@ export default function Entries() {
         no_spinnaker: sel.no_spinnaker,
         phrf_override: sel.phrf_override === '' ? null : Number(sel.phrf_override),
       });
-      setSel({ boat_id: '', fleet_id: '', no_spinnaker: false, phrf_override: '' });
+      setSel({ boat_id: '', fleet_id: '', no_spinnaker: false, phrf_override: '' }); // load() re-defaults fleet_id
       load();
     } catch (err) {
       setError(err.message);
@@ -73,25 +77,29 @@ export default function Entries() {
 
   if (!race) return <p className="text-slate-400">Loading…</p>;
 
+  const singleFleet = (race.fleets || []).length === 1;
+
   return (
     <>
       <h1 className="mb-1 text-2xl font-bold">Entries — {race.name}</h1>
       <p className="mb-4 text-sm text-slate-500">{entries.length} entered</p>
       {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
 
-      <div className="mb-4 grid grid-cols-2 gap-2 rounded border bg-white p-4 md:grid-cols-5">
+      <div className={`mb-4 grid grid-cols-2 gap-2 rounded border bg-white p-4 ${singleFleet ? 'md:grid-cols-4' : 'md:grid-cols-5'}`}>
         <select className="rounded border px-2 py-1 text-sm" value={sel.boat_id} onChange={(e) => setSel({ ...sel, boat_id: e.target.value })}>
           <option value="">Select boat…</option>
           {boats.map((b) => (
             <option key={b.boat_id} value={b.boat_id}>{b.sail_number} — {b.boat_name}</option>
           ))}
         </select>
-        <select className="rounded border px-2 py-1 text-sm" value={sel.fleet_id} onChange={(e) => setSel({ ...sel, fleet_id: e.target.value })}>
-          <option value="">Select fleet…</option>
-          {(race.fleets || []).map((f) => (
-            <option key={f.fleet_id} value={f.fleet_id}>{f.name}</option>
-          ))}
-        </select>
+        {!singleFleet && (
+          <select className="rounded border px-2 py-1 text-sm" value={sel.fleet_id} onChange={(e) => setSel({ ...sel, fleet_id: e.target.value })}>
+            <option value="">Select fleet…</option>
+            {(race.fleets || []).map((f) => (
+              <option key={f.fleet_id} value={f.fleet_id}>{f.name}</option>
+            ))}
+          </select>
+        )}
         <label className="flex items-center gap-1 text-sm">
           <input type="checkbox" checked={sel.no_spinnaker} onChange={(e) => setSel({ ...sel, no_spinnaker: e.target.checked })} />
           Non-spin
@@ -142,7 +150,7 @@ export default function Entries() {
           <tr className="border-b bg-slate-50 text-left text-xs uppercase text-slate-500">
             <th className="px-2 py-1">Sail #</th>
             <th className="px-2 py-1">Boat</th>
-            <th className="px-2 py-1">Fleet</th>
+            {!singleFleet && <th className="px-2 py-1">Fleet</th>}
             <th className="px-2 py-1">Non-spin</th>
             <th className="px-2 py-1">Override</th>
             <th className="px-2 py-1"></th>
@@ -155,7 +163,7 @@ export default function Entries() {
               <tr key={e.entry_id} className="border-b">
                 <td className="px-2 py-1">{e.sail_number}</td>
                 <td className="px-2 py-1 font-medium">{e.boat_name}</td>
-                <td className="px-2 py-1">{fleet ? fleet.name : '—'}</td>
+                {!singleFleet && <td className="px-2 py-1">{fleet ? fleet.name : '—'}</td>}
                 <td className="px-2 py-1">{e.no_spinnaker ? '✓' : ''}</td>
                 <td className="px-2 py-1">{e.phrf_override ?? ''}</td>
                 <td className="px-2 py-1 text-right">
