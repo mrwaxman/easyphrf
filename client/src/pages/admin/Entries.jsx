@@ -10,7 +10,7 @@ export default function Entries() {
   const [race, setRace] = useState(null);
   const [boats, setBoats] = useState([]);
   const [entries, setEntries] = useState([]);
-  const [sel, setSel] = useState({ boat_id: '', fleet_id: '', using_spinnaker: false, phrf_override: '' });
+  const [sel, setSel] = useState({ boat_id: '', fleet_id: '', no_spinnaker: false, phrf_override: '' });
   const [error, setError] = useState(null);
   const [showFleetForm, setShowFleetForm] = useState(false);
   const [newFleet, setNewFleet] = useState(BLANK_FLEET);
@@ -36,10 +36,10 @@ export default function Entries() {
       await apiC.addEntry(id, {
         boat_id: sel.boat_id,
         fleet_id: sel.fleet_id,
-        using_spinnaker: sel.using_spinnaker,
+        no_spinnaker: sel.no_spinnaker,
         phrf_override: sel.phrf_override === '' ? null : Number(sel.phrf_override),
       });
-      setSel({ boat_id: '', fleet_id: '', using_spinnaker: false, phrf_override: '' });
+      setSel({ boat_id: '', fleet_id: '', no_spinnaker: false, phrf_override: '' });
       load();
     } catch (err) {
       setError(err.message);
@@ -93,8 +93,8 @@ export default function Entries() {
           ))}
         </select>
         <label className="flex items-center gap-1 text-sm">
-          <input type="checkbox" checked={sel.using_spinnaker} onChange={(e) => setSel({ ...sel, using_spinnaker: e.target.checked })} />
-          Spinnaker
+          <input type="checkbox" checked={sel.no_spinnaker} onChange={(e) => setSel({ ...sel, no_spinnaker: e.target.checked })} />
+          Non-spin
         </label>
         <input placeholder="PHRF override" className="rounded border px-2 py-1 text-sm" value={sel.phrf_override} onChange={(e) => setSel({ ...sel, phrf_override: e.target.value })} />
         <button onClick={add} className="rounded bg-brand-600 px-3 py-1 text-sm text-white">Add entry</button>
@@ -143,7 +143,7 @@ export default function Entries() {
             <th className="px-2 py-1">Sail #</th>
             <th className="px-2 py-1">Boat</th>
             <th className="px-2 py-1">Fleet</th>
-            <th className="px-2 py-1">Spin</th>
+            <th className="px-2 py-1">Non-spin</th>
             <th className="px-2 py-1">Override</th>
             <th className="px-2 py-1"></th>
           </tr>
@@ -156,7 +156,7 @@ export default function Entries() {
                 <td className="px-2 py-1">{e.sail_number}</td>
                 <td className="px-2 py-1 font-medium">{e.boat_name}</td>
                 <td className="px-2 py-1">{fleet ? fleet.name : '—'}</td>
-                <td className="px-2 py-1">{e.using_spinnaker ? '✓' : ''}</td>
+                <td className="px-2 py-1">{e.no_spinnaker ? '✓' : ''}</td>
                 <td className="px-2 py-1">{e.phrf_override ?? ''}</td>
                 <td className="px-2 py-1 text-right">
                   <button onClick={() => remove(e.entry_id)} className="text-red-600 hover:underline">Remove</button>

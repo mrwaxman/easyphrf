@@ -22,6 +22,15 @@ export function OverrideBadge({ note }) {
   );
 }
 
+/** Gray "NS" marker for an entry racing without a spinnaker. */
+export function NonSpinBadge() {
+  return (
+    <span title="Racing non-spin" className="ml-1 text-xs font-semibold text-slate-500" aria-label="Non-spin">
+      NS
+    </span>
+  );
+}
+
 const RACE_STATUS_STYLES = {
   draft: 'bg-slate-200 text-slate-700',
   open: 'bg-emerald-100 text-emerald-800',

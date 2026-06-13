@@ -37,6 +37,32 @@ describe('ResultsTable', () => {
     expect(screen.getByTitle('Override: measured at dock')).toBeInTheDocument();
   });
 
+  test('non-spin entry shows NS badge', () => {
+    render(
+      <ResultsTable
+        fleet={{
+          fleet_type: 'phrf',
+          entries: [finisher({ no_spinnaker: true, override_applied: false, phrf_override: null })],
+        }}
+      />
+    );
+    expect(screen.getByTitle('Racing non-spin')).toBeInTheDocument();
+  });
+
+  test('override entry does not show NS badge even when no_spinnaker is true', () => {
+    render(
+      <ResultsTable
+        fleet={{
+          fleet_type: 'phrf',
+          entries: [finisher({ no_spinnaker: true, override_applied: true, phrf_override: 120, phrf_override_note: 'test' })],
+        }}
+      />
+    );
+    expect(screen.queryByTitle('Racing non-spin')).not.toBeInTheDocument();
+    // Override badge still present.
+    expect(screen.getByTitle('Override: test')).toBeInTheDocument();
+  });
+
   test('places non-finishers (DNF) below finishers regardless of input order', () => {
     const entries = [
       finisher({ boat_name: 'Did Not Finish', finish_status: 'dnf', fleet_place: 3, corrected_seconds: null }),

@@ -30,20 +30,43 @@ describe('correctTimeToT', () => {
 });
 
 describe('effectiveRating', () => {
-  // New convention: phrf_base is the faster spinnaker rating; phrf_spinnaker
-  // (= phrf_base + spinnaker_offset) is the slower non-spin rating.
   const boat = { phrf_base: 120, spinnaker_offset: 15, phrf_spinnaker: 135 };
 
-  test('returns the override when one is set (even with a spinnaker flown)', () => {
-    expect(effectiveRating({ phrf_override: 99, using_spinnaker: true }, boat)).toBe(99);
-    expect(effectiveRating({ phrf_override: 0, using_spinnaker: false }, boat)).toBe(0);
+  test('returns the override when one is set', () => {
+    expect(effectiveRating({ phrf_override: 99, no_spinnaker: false }, boat)).toBe(99);
+    expect(effectiveRating({ phrf_override: 0, no_spinnaker: true }, boat)).toBe(0);
   });
 
-  test('returns phrf_base (the spinnaker rating) when flying a kite and no override', () => {
-    expect(effectiveRating({ phrf_override: null, using_spinnaker: true }, boat)).toBe(120);
+  test('returns phrf_base (spinnaker rating) when no_spinnaker is false (default)', () => {
+    expect(effectiveRating({ phrf_override: null, no_spinnaker: false }, boat)).toBe(120);
   });
 
-  test('returns phrf_spinnaker (the non-spin rating) when not flying a kite and no override', () => {
-    expect(effectiveRating({ phrf_override: null, using_spinnaker: false }, boat)).toBe(135);
+  test('returns phrf_spinnaker (NS rating) when no_spinnaker is true', () => {
+    expect(effectiveRating({ phrf_override: null, no_spinnaker: true }, boat)).toBe(135);
+  });
+
+  // Per-boat rating examples from the spec.
+  test('Scooter: base 72 with spinnaker, 89 non-spin', () => {
+    const scooter = { phrf_base: 72, phrf_spinnaker: 89 };
+    expect(effectiveRating({ phrf_override: null, no_spinnaker: false }, scooter)).toBe(72);
+    expect(effectiveRating({ phrf_override: null, no_spinnaker: true }, scooter)).toBe(89);
+  });
+
+  test('Jaybird: base 129 with spinnaker, 134 non-spin', () => {
+    const jaybird = { phrf_base: 129, phrf_spinnaker: 134 };
+    expect(effectiveRating({ phrf_override: null, no_spinnaker: false }, jaybird)).toBe(129);
+    expect(effectiveRating({ phrf_override: null, no_spinnaker: true }, jaybird)).toBe(134);
+  });
+
+  test('Bratmobile: base 150 with spinnaker, 170 non-spin', () => {
+    const bratmobile = { phrf_base: 150, phrf_spinnaker: 170 };
+    expect(effectiveRating({ phrf_override: null, no_spinnaker: false }, bratmobile)).toBe(150);
+    expect(effectiveRating({ phrf_override: null, no_spinnaker: true }, bratmobile)).toBe(170);
+  });
+
+  test('phrf_override wins over both spinnaker and non-spin elections', () => {
+    const boat2 = { phrf_base: 100, phrf_spinnaker: 115 };
+    expect(effectiveRating({ phrf_override: 88, no_spinnaker: false }, boat2)).toBe(88);
+    expect(effectiveRating({ phrf_override: 88, no_spinnaker: true }, boat2)).toBe(88);
   });
 });

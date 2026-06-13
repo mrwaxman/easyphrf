@@ -37,8 +37,12 @@ function buildDocument({ Document, Page, Text, View }, detail, club) {
 
   const entryRow = (entry, oneDesign, idx) => {
     const finished = entry.finish_status === 'finished';
+    const noSpin = !entry.override_applied && entry.no_spinnaker;
     const phrfLabel =
-      (entry.inferred ? '*' : '') + (entry.override_applied ? '†' : '') + String(entry.rating_used ?? '');
+      (entry.inferred ? '*' : '') +
+      (entry.override_applied ? '†' : '') +
+      String(entry.rating_used ?? '') +
+      (noSpin ? ' NS' : '');
     const values = {
       place: entry.fleet_place != null ? String(entry.fleet_place) : '—',
       boat: entry.boat_name || '',

@@ -15,7 +15,7 @@ const EDITABLE = [
   'fleet_id',
   'phrf_override',
   'phrf_override_note',
-  'using_spinnaker',
+  'no_spinnaker',
   'self_start_time',
   'finish_time',
   'finish_status',
@@ -59,7 +59,7 @@ router.post(
     const result = await db.query(
       `INSERT INTO race_entries
          (race_id, fleet_id, boat_id, phrf_override, phrf_override_note,
-          using_spinnaker, self_start_time, finish_time, finish_status)
+          no_spinnaker, self_start_time, finish_time, finish_status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
@@ -68,7 +68,7 @@ router.post(
         b.boat_id,
         b.phrf_override ?? null,
         b.phrf_override_note ?? null,
-        b.using_spinnaker ?? false,
+        b.no_spinnaker ?? false,
         localDateTimeToUtc(b.self_start_time, tz),
         localDateTimeToUtc(b.finish_time, tz),
         b.finish_status ?? 'finished',

@@ -10,7 +10,7 @@ function phrfRace() {
 }
 
 /** Build an entry + matching boat from a compact spec. */
-function makeEntry(id, { fleet = 'F', type = 'phrf', phrf, elapsed, status = 'finished', override = null, spin = false, source = 'official' } = {}) {
+function makeEntry(id, { fleet = 'F', type = 'phrf', phrf, elapsed, status = 'finished', override = null, noSpin = false, source = 'official' } = {}) {
   return {
     entry: {
       entry_id: id,
@@ -20,15 +20,14 @@ function makeEntry(id, { fleet = 'F', type = 'phrf', phrf, elapsed, status = 'fi
       finish_status: status,
       finish_time: status === 'finished' && elapsed != null ? finishAfter(elapsed) : null,
       phrf_override: override,
-      using_spinnaker: spin,
+      no_spinnaker: noSpin,
     },
-    // `phrf` is the rating these specs expect to be scored on. Entries default
-    // to non-spin, which is scored on phrf_spinnaker, so phrf_spinnaker = phrf
-    // and phrf_base is the faster spinnaker rating (15 lower, offset 15).
+    // `phrf` is the BASE (spinnaker) rating. Default entry races on phrf_base.
+    // phrf_spinnaker is the NS rating (phrf + 15 offset used in tests).
     boat: {
       boat_id: `boat-${id}`,
-      phrf_base: phrf - 15,
-      phrf_spinnaker: phrf,
+      phrf_base: phrf,
+      phrf_spinnaker: phrf + 15,
       rating_source: source,
     },
   };
@@ -167,16 +166,13 @@ describe('scoreRace — simultaneous start', () => {
     expect(withoutOverride.override_applied).toBe(false);
   });
 
-  test('flying a spinnaker is scored on phrf_base, not phrf_spinnaker', () => {
-    // makeEntry sets phrf_base = phrf - 15, phrf_spinnaker = phrf. With a kite
-    // flown, the faster phrf_base (75) is used instead of phrf_spinnaker (90).
-    const spun = runRace([['A', { phrf: 90, elapsed: 3600, spin: true }]]).byId.A;
-    const plain = runRace([['A', { phrf: 90, elapsed: 3600 }]]).byId.A;
-
-    expect(spun.rating_used).toBe(75);
-    expect(plain.rating_used).toBe(90);
-    expect(spun.corrected_seconds).toBe(Math.round((3600 * 650) / 725));
-    expect(plain.corrected_seconds).toBe(Math.round((3600 * 650) / 740));
+  test('non-spin entry (no_spinnaker true) is scored on phrf_spinnaker, not phrf_base', () => {
+    // makeEntry sets phrf_base = phrf, phrf_spinnaker = phrf + 15. With no_spinnaker true,
+    // the slower phrf_spinnaker (105) is used instead of phrf_base (90).
+    const spinEntry  = runRace([['A', { phrf: 90, elapsed: 3600 }]]).byId.A;         // default = spin
+    const noSpinEntry = runRace([['A', { phrf: 90, elapsed: 3600, noSpin: true }]]).byId.A;
+    expect(spinEntry.rating_used).toBe(90);    // phrf_base = phrf = 90
+    expect(noSpinEntry.rating_used).toBe(105); // phrf_spinnaker = phrf + 15 = 105
   });
 
   test('inferred ratings are flagged in the output', () => {
@@ -201,7 +197,7 @@ describe('scoreRace — other start types', () => {
       finish_status: 'finished',
       self_start_time: selfStart,
       finish_time: new Date(selfStart.getTime() + 3600 * 1000),
-      using_spinnaker: false,
+      no_spinnaker: true,   // racing non-spin → scores on phrf_spinnaker
       phrf_override: null,
     };
     // Non-spin entry => scored on phrf_spinnaker (100).
@@ -222,7 +218,7 @@ describe('scoreRace — other start types', () => {
       finish_status: 'finished',
       start_time: boatStart,
       finish_time: new Date(boatStart.getTime() + 5000 * 1000),
-      using_spinnaker: false,
+      no_spinnaker: false,
       phrf_override: null,
     };
     const boat = { boat_id: 'boat-A', phrf_base: 105, phrf_spinnaker: 120, rating_source: 'official' };
@@ -241,14 +237,14 @@ describe('scoreRace — other start types', () => {
       finish_status: 'finished',
       start_time: new Date(gunTime.getTime() + 10 * 60 * 1000), // starts 10 min after B
       finish_time: new Date(gunTime.getTime() + 70 * 60 * 1000), // finishes at T+70
-      using_spinnaker: false, phrf_override: null,
+      no_spinnaker: false, phrf_override: null,
     };
     const entryB = {
       entry_id: 'B', boat_id: 'boat-B', fleet_id: 'F', fleet_type: 'phrf',
       finish_status: 'finished',
       start_time: gunTime,
       finish_time: new Date(gunTime.getTime() + 75 * 60 * 1000), // finishes at T+75
-      using_spinnaker: false, phrf_override: null,
+      no_spinnaker: false, phrf_override: null,
     };
     const boats = [
       { boat_id: 'boat-A', phrf_base: 150, phrf_spinnaker: 165, rating_source: 'official' },
@@ -271,7 +267,7 @@ describe('scoreRace — other start types', () => {
       finish_status: 'finished',
       start_time: finish,  // start == finish => elapsed = 0
       finish_time: finish,
-      using_spinnaker: false, phrf_override: null,
+      no_spinnaker: false, phrf_override: null,
     };
     const boat = { boat_id: 'boat-A', phrf_base: 100, phrf_spinnaker: 115, rating_source: 'official' };
     const [scored] = scoreRace(race, [entry], [boat]);
@@ -288,14 +284,14 @@ describe('scoreRace — other start types', () => {
       finish_status: 'finished',
       start_time: gunTime,                                          // reference boat starts at gun
       finish_time: new Date(gunTime.getTime() + 3900 * 1000),      // finishes 65 min after gun
-      using_spinnaker: false, phrf_override: null,
+      no_spinnaker: false, phrf_override: null,
     };
     const fastEntry = {
       entry_id: 'fast', boat_id: 'boat-fast', fleet_id: 'F', fleet_type: 'phrf',
       finish_status: 'finished',
       start_time: new Date(gunTime.getTime() + 300 * 1000),        // starts 300 s after gun
       finish_time: new Date(gunTime.getTime() + 3900 * 1000),      // same wall-clock finish
-      using_spinnaker: false, phrf_override: null,
+      no_spinnaker: false, phrf_override: null,
     };
     const boats = [
       { boat_id: 'boat-ref',  phrf_base: 150, phrf_spinnaker: 165, rating_source: 'official' },
@@ -316,5 +312,38 @@ describe('scoreRace — other start types', () => {
     // wall-clock instant (gun + 3900 s), so they tie for first.
     expect(fast.fleet_place).toBe(1);
     expect(ref.fleet_place).toBe(1);
+  });
+
+  test('pursuit start uses effective rating: non-spin boat has earlier start than spinnaker boat', () => {
+    // Both boats have phrf_base 90; the non-spin one has NS rating 105 (slower → starts earlier in pursuit).
+    const race = { start_type: 'pursuit' };
+    const gunTime = new Date('2026-06-01T18:00:00Z');
+    const spinEntry = {
+      entry_id: 'spin', boat_id: 'boat-spin', fleet_id: 'F', fleet_type: 'phrf',
+      finish_status: 'finished',
+      start_time: gunTime,  // would start at gun if it's the reference boat
+      finish_time: new Date(gunTime.getTime() + 3600 * 1000),
+      no_spinnaker: false, phrf_override: null,
+    };
+    const nsEntry = {
+      entry_id: 'ns', boat_id: 'boat-ns', fleet_id: 'F', fleet_type: 'phrf',
+      finish_status: 'finished',
+      start_time: gunTime,  // same as spin for this test; effectiveRating is the point
+      finish_time: new Date(gunTime.getTime() + 3600 * 1000),
+      no_spinnaker: true, phrf_override: null,
+    };
+    const boats = [
+      { boat_id: 'boat-spin', phrf_base: 90, phrf_spinnaker: 105, rating_source: 'official' },
+      { boat_id: 'boat-ns',   phrf_base: 90, phrf_spinnaker: 105, rating_source: 'official' },
+    ];
+    const scored = scoreRace(race, [spinEntry, nsEntry], boats);
+    const spin = scored.find((e) => e.entry_id === 'spin');
+    const ns   = scored.find((e) => e.entry_id === 'ns');
+    // Both corrected_seconds null for pursuit.
+    expect(spin.corrected_seconds).toBeNull();
+    expect(ns.corrected_seconds).toBeNull();
+    // rating_used for spin = phrf_base = 90; for ns = phrf_spinnaker = 105.
+    expect(spin.rating_used).toBe(90);
+    expect(ns.rating_used).toBe(105);
   });
 });

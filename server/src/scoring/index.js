@@ -44,19 +44,20 @@ function correctTimeToT(elapsedSeconds, phrfRating) {
 
 /**
  * The rating to use for an entry: an explicit override wins; otherwise the
- * boat's base (spinnaker) rating when flying a kite, else its non-spin rating.
+ * boat's base (spinnaker) rating by default, or its non-spin rating when the
+ * entry has elected to race without a spinnaker.
  *
  * Per the rating convention, phrf_base is the faster spinnaker rating and
  * phrf_spinnaker (= phrf_base + spinnaker_offset) is the slower non-spinnaker
- * rating. So a boat flying a kite is scored on phrf_base, and one without on
- * phrf_spinnaker.
+ * rating. Every boat defaults to racing with a spinnaker (phrf_base); an entry
+ * with no_spinnaker = true is scored on phrf_spinnaker.
  */
 function effectiveRating(entry, boat) {
   if (entry.phrf_override !== null && entry.phrf_override !== undefined) {
     return entry.phrf_override;
   }
-  if (entry.using_spinnaker) return boat.phrf_base;
-  return boat.phrf_spinnaker;
+  if (entry.no_spinnaker) return boat.phrf_spinnaker;  // NS rating
+  return boat.phrf_base;                                 // spinnaker/base (new default)
 }
 
 // --- 2c. Elapsed time --------------------------------------------------------
@@ -137,7 +138,7 @@ function assignPlaces(sortedFinishers, timeField, placeField) {
  * @param {object} race    Race record. Uses start_type, self_timed_mode, start_time.
  * @param {object[]} entries Entries to score. Each must include: boat_id,
  *   fleet_id, fleet_type ('phrf'|'one_design'), finish_status, and the relevant
- *   timestamps. phrf_override / using_spinnaker optional.
+ *   timestamps. phrf_override / no_spinnaker optional.
  * @param {object[]} boats  Boats referenced by entries (boat_id, phrf_base,
  *   phrf_spinnaker, rating_source...).
  * @returns {object[]} New array of enriched entries with elapsed_seconds,

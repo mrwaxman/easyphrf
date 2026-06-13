@@ -1,5 +1,5 @@
 import { formatDuration } from '@easyphrf/shared';
-import { InferredBadge, OverrideBadge, FinishStatusLabel } from './Badges.jsx';
+import { InferredBadge, OverrideBadge, FinishStatusLabel, NonSpinBadge } from './Badges.jsx';
 
 const isFinisher = (e) => e.finish_status === 'finished';
 
@@ -43,6 +43,7 @@ export function ResultsTable({ fleet, startType }) {
           const finished = isFinisher(e);
           const inferred = e.inferred || e.rating_source === 'inferred';
           const override = e.override_applied || (e.phrf_override !== null && e.phrf_override !== undefined);
+          const noSpin = !override && e.no_spinnaker;
           return (
             <tr key={e.entry_id} className="border-b last:border-0" data-testid="results-row" data-boat={e.boat_name}>
               <td className="px-2 py-1">{finished ? e.fleet_place : '—'}</td>
@@ -57,6 +58,7 @@ export function ResultsTable({ fleet, startType }) {
                     {e.rating_used}
                     {inferred && <InferredBadge />}
                     {override && <OverrideBadge note={e.phrf_override_note} />}
+                    {noSpin && <NonSpinBadge />}
                   </>
                 )}
               </td>
