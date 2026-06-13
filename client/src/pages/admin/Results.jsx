@@ -155,6 +155,7 @@ export default function Results() {
               <span className="text-slate-500">Actual start (gun) time</span>
               <input
                 type="time"
+                step="1"
                 className="mt-1 block rounded border px-2 py-1"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
@@ -190,11 +191,11 @@ export default function Results() {
               <td className="px-2 py-1 font-medium">{e.boat_name} <span className="text-slate-400">{e.sail_number}</span></td>
               {selfTimed && (
                 <td className="px-2 py-1">
-                  <input type="datetime-local" className="rounded border px-1 py-0.5" value={e.self_start_time} onChange={(ev) => updateEntry(e.entry_id, { self_start_time: ev.target.value })} />
+                  <input type="datetime-local" step="1" className="rounded border px-1 py-0.5" value={e.self_start_time} onChange={(ev) => updateEntry(e.entry_id, { self_start_time: ev.target.value })} />
                 </td>
               )}
               <td className="px-2 py-1">
-                <input type="datetime-local" className="rounded border px-1 py-0.5" value={e.finish_time} onChange={(ev) => updateEntry(e.entry_id, { finish_time: ev.target.value })} />
+                <input type="datetime-local" step="1" className="rounded border px-1 py-0.5" value={e.finish_time} onChange={(ev) => updateEntry(e.entry_id, { finish_time: ev.target.value })} />
                 {entryErrors.get(e.entry_id) && (
                   <p className="text-xs text-amber-700">{entryErrors.get(e.entry_id)}</p>
                 )}

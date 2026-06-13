@@ -44,14 +44,22 @@ describe('utcToZonedParts', () => {
   test('renders an instant as club-local date and time of day', () => {
     expect(utcToZonedParts('2026-07-02T01:00:00.000Z', LA)).toEqual({
       date: '2026-07-01',
-      time: '18:00',
-      dateTime: '2026-07-01T18:00',
+      time: '18:00:00',
+      dateTime: '2026-07-01T18:00:00',
     });
   });
 
   test('round-trips with zonedTimeToUtc', () => {
     const instant = zonedTimeToUtc('2026-03-15', '07:45', LA);
-    expect(utcToZonedParts(instant, LA).time).toBe('07:45');
+    expect(utcToZonedParts(instant, LA).time).toBe('07:45:00');
+  });
+
+  test('includes seconds in time and dateTime fields', () => {
+    // 18:30:45 LA summer = 01:30:45 UTC next day
+    const instant = zonedTimeToUtc('2026-07-01', '18:30:45', LA);
+    const parts = utcToZonedParts(instant, LA);
+    expect(parts.time).toBe('18:30:45');
+    expect(parts.dateTime).toBe('2026-07-01T18:30:45');
   });
 
   test('returns nulls for empty input', () => {

@@ -102,7 +102,7 @@ function localDateTimeToUtc(value, timeZone) {
 
 /**
  * Render an instant as its wall-clock parts in `timeZone`:
- *   { date: 'YYYY-MM-DD', time: 'HH:mm', dateTime: 'YYYY-MM-DDTHH:mm' }
+ *   { date: 'YYYY-MM-DD', time: 'HH:mm:ss', dateTime: 'YYYY-MM-DDTHH:mm:ss' }
  * Returns nulls for empty/invalid input.
  */
 function utcToZonedParts(value, timeZone) {
@@ -119,12 +119,13 @@ function utcToZonedParts(value, timeZone) {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
   });
   const parts = {};
   for (const p of dtf.formatToParts(d)) parts[p.type] = p.value;
   const hour = parts.hour === '24' ? '00' : parts.hour;
   const date = `${parts.year}-${parts.month}-${parts.day}`;
-  const time = `${hour}:${parts.minute}`;
+  const time = `${hour}:${parts.minute}:${parts.second}`;
   return { date, time, dateTime: `${date}T${time}` };
 }
 

@@ -262,7 +262,7 @@ describe('admin races: scheduled start time (club timezone)', () => {
     expect(new Date(res.body.start_time).toISOString()).toBe('2026-07-02T01:00:00.000Z');
 
     const detail = await request(app).get(`/api/v1/admin/races/${res.body.race_id}`).set(ADMIN);
-    expect(detail.body.start_time_of_day).toBe('18:00');
+    expect(detail.body.start_time_of_day).toBe('18:00:00');
     expect(detail.body.timezone).toBe('America/Los_Angeles');
   });
 

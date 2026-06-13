@@ -277,4 +277,44 @@ describe('scoreRace — other start types', () => {
     const [scored] = scoreRace(race, [entry], [boat]);
     expect(scored.elapsed_seconds).toBeNull();
   });
+
+  test('pursuit: reference boat elapsed = finish minus gun time', () => {
+    const gunTime = new Date('2026-06-01T18:00:00Z');
+    const race = { start_type: 'pursuit' };
+    // Reference boat (highest PHRF) starts at gun time.
+    // A faster boat starts 300 s after the gun.
+    const refEntry = {
+      entry_id: 'ref', boat_id: 'boat-ref', fleet_id: 'F', fleet_type: 'phrf',
+      finish_status: 'finished',
+      start_time: gunTime,                                          // reference boat starts at gun
+      finish_time: new Date(gunTime.getTime() + 3900 * 1000),      // finishes 65 min after gun
+      using_spinnaker: false, phrf_override: null,
+    };
+    const fastEntry = {
+      entry_id: 'fast', boat_id: 'boat-fast', fleet_id: 'F', fleet_type: 'phrf',
+      finish_status: 'finished',
+      start_time: new Date(gunTime.getTime() + 300 * 1000),        // starts 300 s after gun
+      finish_time: new Date(gunTime.getTime() + 3900 * 1000),      // same wall-clock finish
+      using_spinnaker: false, phrf_override: null,
+    };
+    const boats = [
+      { boat_id: 'boat-ref',  phrf_base: 150, phrf_spinnaker: 165, rating_source: 'official' },
+      { boat_id: 'boat-fast', phrf_base:  90, phrf_spinnaker: 105, rating_source: 'official' },
+    ];
+    const scored = scoreRace(race, [refEntry, fastEntry], boats);
+    const ref  = scored.find((e) => e.entry_id === 'ref');
+    const fast = scored.find((e) => e.entry_id === 'fast');
+
+    // Reference boat elapsed = finish - gun_time = 3900 s (NOT finish - epoch)
+    expect(ref.elapsed_seconds).toBe(3900);
+    // Fast boat started 300 s later so elapsed = 3600 s
+    expect(fast.elapsed_seconds).toBe(3600);
+    // Pursuit: no corrected times
+    expect(ref.corrected_seconds).toBeNull();
+    expect(fast.corrected_seconds).toBeNull();
+    // Pursuit places by clock finish, not elapsed. Both boats cross at the same
+    // wall-clock instant (gun + 3900 s), so they tie for first.
+    expect(fast.fleet_place).toBe(1);
+    expect(ref.fleet_place).toBe(1);
+  });
 });
