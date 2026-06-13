@@ -23,11 +23,14 @@ const COLUMNS = [
  * never imports the ESM renderer at require-time.
  */
 function buildDocument({ Document, Page, Text, View }, detail, club) {
+  const isPursuit = detail.start_type === 'pursuit';
+  const columns = isPursuit ? COLUMNS.filter((c) => c.key !== 'corrected') : COLUMNS;
+
   const headerRow = () =>
     h(
       View,
       { style: [styles.row, styles.headRow] },
-      COLUMNS.map((c, i) =>
+      columns.map((c, i) =>
         h(View, { style: [styles.cell, { width: c.width }], key: i }, h(Text, { style: styles.headCell }, c.label))
       )
     );
@@ -48,7 +51,7 @@ function buildDocument({ Document, Page, Text, View }, detail, club) {
     return h(
       View,
       { style: styles.row, key: idx },
-      COLUMNS.map((c, i) => h(View, { style: [styles.cell, { width: c.width }], key: i }, h(Text, {}, values[c.key])))
+      columns.map((c, i) => h(View, { style: [styles.cell, { width: c.width }], key: i }, h(Text, {}, values[c.key])))
     );
   };
 

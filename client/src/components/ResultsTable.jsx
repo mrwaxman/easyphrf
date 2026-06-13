@@ -20,8 +20,9 @@ function orderedEntries(entries) {
  * Results table for a single fleet. One-design fleets are scored on elapsed
  * time only (no PHRF / corrected columns of meaning).
  */
-export function ResultsTable({ fleet }) {
+export function ResultsTable({ fleet, startType }) {
   const oneDesign = fleet.fleet_type === 'one_design';
+  const isPursuit = startType === 'pursuit';
   const rows = orderedEntries(fleet.entries || []);
 
   return (
@@ -34,7 +35,7 @@ export function ResultsTable({ fleet }) {
           <th className="px-2 py-1">Skipper</th>
           <th className="px-2 py-1">PHRF</th>
           <th className="px-2 py-1">Elapsed</th>
-          <th className="px-2 py-1">Corrected</th>
+          {!isPursuit && <th className="px-2 py-1">Corrected</th>}
         </tr>
       </thead>
       <tbody>
@@ -62,7 +63,7 @@ export function ResultsTable({ fleet }) {
               <td className="px-2 py-1">
                 {finished ? formatDuration(e.elapsed_seconds) : <FinishStatusLabel status={e.finish_status} />}
               </td>
-              <td className="px-2 py-1">{finished && !oneDesign ? formatDuration(e.corrected_seconds) : '—'}</td>
+              {!isPursuit && <td className="px-2 py-1">{finished && !oneDesign ? formatDuration(e.corrected_seconds) : '—'}</td>}
             </tr>
           );
         })}

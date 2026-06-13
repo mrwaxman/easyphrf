@@ -50,6 +50,16 @@ describe('ResultsTable', () => {
     expect(screen.getByText('DNF')).toBeInTheDocument();
   });
 
+  test('pursuit fleet omits the Corrected column header and cell', () => {
+    render(
+      <ResultsTable
+        startType="pursuit"
+        fleet={{ fleet_type: 'phrf', entries: [finisher({ corrected_seconds: null })] }}
+      />
+    );
+    expect(screen.queryByText('Corrected')).not.toBeInTheDocument();
+  });
+
   test('one-design fleet hides PHRF and corrected columns of meaning', () => {
     render(
       <ResultsTable fleet={{ fleet_type: 'one_design', entries: [finisher({ rating_used: 0 })] }} />

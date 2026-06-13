@@ -153,15 +153,23 @@ function scoreRace(race, entries, boats) {
     const rating = effectiveRating(entry, boat);
     const isFinisher = entry.finish_status === FINISHED;
     const isOneDesign = entry.fleet_type === 'one_design';
+    const isPursuit = race.start_type === 'pursuit';
 
     let elapsed = null;
     let corrected = null;
     if (isFinisher) {
       elapsed = computeElapsedSeconds(race, entry);
-      if (elapsed !== null && !isOneDesign) {
+      if (elapsed !== null && elapsed <= 0) elapsed = null;
+      if (elapsed !== null && !isOneDesign && !isPursuit) {
         corrected = Math.round(correctTimeToT(elapsed, rating));
       }
     }
+    const finish_time_s = isFinisher
+      ? (() => {
+          const ms = toMillis(entry.finish_time);
+          return ms !== null ? Math.round(ms / 1000) : null;
+        })()
+      : null;
 
     return {
       ...entry,
@@ -172,6 +180,7 @@ function scoreRace(race, entries, boats) {
       override_note: entry.phrf_override_note ?? null,
       elapsed_seconds: elapsed,
       corrected_seconds: corrected,
+      finish_time_s,
       fleet_place: null,
       overall_place: null,
     };
@@ -184,9 +193,11 @@ function scoreRace(race, entries, boats) {
     byFleet.get(e.fleet_id).push(e);
   }
 
+  const isPursuit = race.start_type === 'pursuit';
+
   for (const fleetEntries of byFleet.values()) {
     const isOneDesign = fleetEntries.some((e) => e.fleet_type === 'one_design');
-    const timeField = isOneDesign ? 'elapsed_seconds' : 'corrected_seconds';
+    const timeField = isPursuit ? 'finish_time_s' : (isOneDesign ? 'elapsed_seconds' : 'corrected_seconds');
 
     const finishers = fleetEntries
       .filter((e) => e.finish_status === FINISHED && e[timeField] !== null)
@@ -204,14 +215,15 @@ function scoreRace(race, entries, boats) {
 
   // 3. Overall placing across PHRF fleets only (one-design excluded).
   const phrfEntries = scored.filter((e) => e.fleet_type !== 'one_design');
+  const overallTimeField = isPursuit ? 'finish_time_s' : 'corrected_seconds';
   const overallFinishers = phrfEntries
-    .filter((e) => e.finish_status === FINISHED && e.corrected_seconds !== null)
-    .sort((a, b) => a.corrected_seconds - b.corrected_seconds);
+    .filter((e) => e.finish_status === FINISHED && e[overallTimeField] !== null)
+    .sort((a, b) => a[overallTimeField] - b[overallTimeField]);
   const overallNonFinishers = phrfEntries.filter(
-    (e) => !(e.finish_status === FINISHED && e.corrected_seconds !== null)
+    (e) => !(e.finish_status === FINISHED && e[overallTimeField] !== null)
   );
 
-  assignPlaces(overallFinishers, 'corrected_seconds', 'overall_place');
+  assignPlaces(overallFinishers, overallTimeField, 'overall_place');
   overallNonFinishers.forEach((e, i) => {
     e.overall_place = overallFinishers.length + i + 1;
   });

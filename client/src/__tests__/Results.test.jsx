@@ -119,3 +119,74 @@ describe('Results — date and time defaults', () => {
     expect(document.querySelector('input[type="time"]').value).toBe('12:00');
   });
 });
+
+describe('Results — finish time validation', () => {
+  const race = {
+    race_id: 'race-1',
+    name: 'Club Race',
+    status: 'draft',
+    start_type: 'simultaneous',
+    race_date: '2026-07-01T00:00:00.000Z',
+    start_time_of_day: '18:00',
+  };
+
+  test('blocks calculate when finish time is at gun time', async () => {
+    mockApi.getRace.mockResolvedValue(race);
+    mockApi.listEntries.mockResolvedValue([
+      { entry_id: 'e1', boat_name: 'Alpha', sail_number: 'USA 1',
+        finish_status: 'finished', finish_time_local: '2026-07-01T18:00',
+        self_start_time_local: null },
+    ]);
+    renderResults();
+    await screen.findByText('Results — Club Race');
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Results/i }));
+    await screen.findByText('Finish time must be after the start time.');
+    expect(mockApi.scoreRace).not.toHaveBeenCalled();
+  });
+
+  test('blocks calculate when finish time is before gun time', async () => {
+    mockApi.getRace.mockResolvedValue(race);
+    mockApi.listEntries.mockResolvedValue([
+      { entry_id: 'e1', boat_name: 'Alpha', sail_number: 'USA 1',
+        finish_status: 'finished', finish_time_local: '2026-07-01T17:59',
+        self_start_time_local: null },
+    ]);
+    renderResults();
+    await screen.findByText('Results — Club Race');
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Results/i }));
+    await screen.findByText('Finish time must be after the start time.');
+    expect(mockApi.scoreRace).not.toHaveBeenCalled();
+  });
+
+  test('allows calculate when finish time is after gun time', async () => {
+    mockApi.getRace.mockResolvedValue(race);
+    mockApi.updateRace.mockResolvedValue({});
+    mockApi.updateEntry = jest.fn().mockResolvedValue({});
+    mockApi.scoreRace.mockResolvedValue({ ...race, fleets: [] });
+    mockApi.listEntries.mockResolvedValue([
+      { entry_id: 'e1', boat_name: 'Alpha', sail_number: 'USA 1',
+        finish_status: 'finished', finish_time_local: '2026-07-01T19:00',
+        self_start_time_local: null },
+    ]);
+    renderResults();
+    await screen.findByText('Results — Club Race');
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Results/i }));
+    await waitFor(() => expect(mockApi.scoreRace).toHaveBeenCalled());
+  });
+
+  test('DNF entry with no finish time does not block calculate', async () => {
+    mockApi.getRace.mockResolvedValue(race);
+    mockApi.updateRace.mockResolvedValue({});
+    mockApi.updateEntry = jest.fn().mockResolvedValue({});
+    mockApi.scoreRace.mockResolvedValue({ ...race, fleets: [] });
+    mockApi.listEntries.mockResolvedValue([
+      { entry_id: 'e1', boat_name: 'Alpha', sail_number: 'USA 1',
+        finish_status: 'dnf', finish_time_local: null,
+        self_start_time_local: null },
+    ]);
+    renderResults();
+    await screen.findByText('Results — Club Race');
+    fireEvent.click(screen.getByRole('button', { name: /Calculate Results/i }));
+    await waitFor(() => expect(mockApi.scoreRace).toHaveBeenCalled());
+  });
+});

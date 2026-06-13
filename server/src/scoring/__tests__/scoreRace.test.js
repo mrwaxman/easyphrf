@@ -229,4 +229,52 @@ describe('scoreRace — other start types', () => {
     const [scored] = scoreRace(race, [entry], [boat]);
     expect(scored.elapsed_seconds).toBe(5000);
   });
+
+  test('pursuit: places boats by finish clock time (not corrected time)', () => {
+    const race = { start_type: 'pursuit' };
+    const gunTime = new Date('2026-06-01T18:00:00Z');
+    // Boat A starts 10 min late (higher PHRF), finishes first by clock
+    // Boat B starts at gun, finishes second by clock
+    // By corrected time the order would differ, but pursuit uses clock finish
+    const entryA = {
+      entry_id: 'A', boat_id: 'boat-A', fleet_id: 'F', fleet_type: 'phrf',
+      finish_status: 'finished',
+      start_time: new Date(gunTime.getTime() + 10 * 60 * 1000), // starts 10 min after B
+      finish_time: new Date(gunTime.getTime() + 70 * 60 * 1000), // finishes at T+70
+      using_spinnaker: false, phrf_override: null,
+    };
+    const entryB = {
+      entry_id: 'B', boat_id: 'boat-B', fleet_id: 'F', fleet_type: 'phrf',
+      finish_status: 'finished',
+      start_time: gunTime,
+      finish_time: new Date(gunTime.getTime() + 75 * 60 * 1000), // finishes at T+75
+      using_spinnaker: false, phrf_override: null,
+    };
+    const boats = [
+      { boat_id: 'boat-A', phrf_base: 150, phrf_spinnaker: 165, rating_source: 'official' },
+      { boat_id: 'boat-B', phrf_base: 90, phrf_spinnaker: 105, rating_source: 'official' },
+    ];
+    const scored = scoreRace(race, [entryA, entryB], boats);
+    const a = scored.find((e) => e.entry_id === 'A');
+    const b = scored.find((e) => e.entry_id === 'B');
+    expect(a.fleet_place).toBe(1);  // A finishes first by clock
+    expect(b.fleet_place).toBe(2);
+    expect(a.corrected_seconds).toBeNull();
+    expect(b.corrected_seconds).toBeNull();
+  });
+
+  test('pursuit: elapsed <= 0 is treated as null (excluded from placing)', () => {
+    const race = { start_type: 'pursuit' };
+    const finish = new Date('2026-06-01T18:00:00Z');
+    const entry = {
+      entry_id: 'A', boat_id: 'boat-A', fleet_id: 'F', fleet_type: 'phrf',
+      finish_status: 'finished',
+      start_time: finish,  // start == finish => elapsed = 0
+      finish_time: finish,
+      using_spinnaker: false, phrf_override: null,
+    };
+    const boat = { boat_id: 'boat-A', phrf_base: 100, phrf_spinnaker: 115, rating_source: 'official' };
+    const [scored] = scoreRace(race, [entry], [boat]);
+    expect(scored.elapsed_seconds).toBeNull();
+  });
 });

@@ -6,6 +6,11 @@ import { FINISH_STATUSES, FINISH_STATUS_LABELS } from '@easyphrf/shared';
 
 const dateOnly = (v) => (v ? String(v).slice(0, 10) : '');
 
+function buildGunDateTime(raceDate, timeOfDay) {
+  const d = String(raceDate).slice(0, 10);
+  return new Date(`${d}T${timeOfDay}:00`);
+}
+
 export default function Results() {
   const { id } = useParams();
   const apiC = useApi();
@@ -15,6 +20,7 @@ export default function Results() {
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [entryErrors, setEntryErrors] = useState(new Map());
 
   const load = useCallback(async () => {
     const [r, e] = await Promise.all([apiC.getRace(id), apiC.listEntries(id)]);
@@ -46,8 +52,32 @@ export default function Results() {
     });
   };
 
-  const updateEntry = (eid, patch) =>
+  const updateEntry = (eid, patch) => {
     setEntries((prev) => prev.map((e) => (e.entry_id === eid ? { ...e, ...patch } : e)));
+    setEntryErrors((prev) => {
+      const next = new Map(prev);
+      next.delete(eid);
+      return next;
+    });
+  };
+
+  const validateEntries = () => {
+    const errors = new Map();
+    for (const e of entries) {
+      if (!e.finish_time || e.finish_status !== 'finished') continue;
+      const finish = new Date(e.finish_time);
+      let start = null;
+      if (race.start_type === 'simultaneous') {
+        start = buildGunDateTime(race.race_date, startTime);
+      } else if (race.start_type === 'self_timed') {
+        start = e.self_start_time ? new Date(e.self_start_time) : null;
+      }
+      if (start && finish <= start) {
+        errors.set(e.entry_id, 'Finish time must be after the start time.');
+      }
+    }
+    return errors;
+  };
 
   const persistEntry = async (e) => {
     await apiC.updateEntry(id, e.entry_id, {
@@ -73,6 +103,9 @@ export default function Results() {
   const calculate = async () => {
     if (busy) return;
     setError(null);
+    const errors = validateEntries();
+    setEntryErrors(errors);
+    if (errors.size > 0) return;
     setBusy(true);
     try {
       if (race.start_type === 'simultaneous') await saveStart();
@@ -162,6 +195,9 @@ export default function Results() {
               )}
               <td className="px-2 py-1">
                 <input type="datetime-local" className="rounded border px-1 py-0.5" value={e.finish_time} onChange={(ev) => updateEntry(e.entry_id, { finish_time: ev.target.value })} />
+                {entryErrors.get(e.entry_id) && (
+                  <p className="text-xs text-amber-700">{entryErrors.get(e.entry_id)}</p>
+                )}
               </td>
               <td className="px-2 py-1">
                 <select className="rounded border px-1 py-0.5" value={e.finish_status} onChange={(ev) => updateEntry(e.entry_id, { finish_status: ev.target.value })}>

@@ -30,7 +30,7 @@ export function RaceResultsView({ race }) {
       {phrfFleets.map((fleet) => (
         <section key={fleet.fleet_id} className="my-5">
           <h2 className="mb-1 text-lg font-semibold">{fleet.name}</h2>
-          <ResultsTable fleet={fleet} />
+          <ResultsTable fleet={fleet} startType={race.start_type} />
         </section>
       ))}
 
@@ -38,6 +38,7 @@ export function RaceResultsView({ race }) {
         <section className="my-5" data-testid="overall-standings">
           <h2 className="mb-1 text-lg font-semibold">Overall PHRF Standings</h2>
           <ResultsTable
+            startType={race.start_type}
             fleet={{
               fleet_id: 'overall',
               fleet_type: 'phrf',
@@ -50,7 +51,7 @@ export function RaceResultsView({ race }) {
       {oneDesignFleets.map((fleet) => (
         <section key={fleet.fleet_id} className="my-5">
           <h2 className="mb-1 text-lg font-semibold">{fleet.name} (One-Design)</h2>
-          <ResultsTable fleet={fleet} />
+          <ResultsTable fleet={fleet} startType={race.start_type} />
         </section>
       ))}
     </div>
