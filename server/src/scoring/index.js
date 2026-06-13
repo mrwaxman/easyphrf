@@ -337,7 +337,7 @@ function racePoints(result) {
  */
 function scoreSeriesStandings(series, raceResults) {
   const rules = parseThrowoutRule(series && series.throwout_rule);
-  const minRaces = (series && series.min_races_to_qualify) ?? 1;
+  const minRaces = (series && series.min_races_to_qualify) ?? 0;
 
   // Order races chronologically so "most recent" is well defined. Stable sort
   // by date string (ISO/Date both compare correctly via getTime fallback).

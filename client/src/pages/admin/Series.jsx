@@ -9,7 +9,7 @@ const BLANK = {
   name: '',
   season_year: new Date().getFullYear(),
   throwout_rule: '',
-  min_races_to_qualify: 1,
+  min_races_to_qualify: '',
   notes: '',
 };
 
@@ -27,7 +27,7 @@ export default function Series() {
       await apiC.createSeries({
         ...form,
         season_year: Number(form.season_year),
-        min_races_to_qualify: Number(form.min_races_to_qualify),
+        min_races_to_qualify: form.min_races_to_qualify !== '' ? Number(form.min_races_to_qualify) : null,
       });
       setForm(BLANK);
       state.reload();
@@ -73,10 +73,11 @@ export default function Series() {
           onChange={(e) => setForm({ ...form, throwout_rule: e.target.value })}
         />
         <label className="flex flex-col gap-1 text-xs text-slate-500">
-          Min races to qualify
+          Min races to qualify (optional)
           <input
             type="number"
             min="1"
+            placeholder="None"
             className="rounded border px-2 py-1 text-sm"
             value={form.min_races_to_qualify}
             onChange={(e) => setForm({ ...form, min_races_to_qualify: e.target.value })}

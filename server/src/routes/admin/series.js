@@ -31,10 +31,11 @@ router.post(
     requireFields(req.body, ['name', 'season_year']);
     ensureEnum(req.body.spinnaker_mode, SPINNAKER_MODES, 'spinnaker_mode');
     const b = req.body;
+    const minRaces = b.min_races_to_qualify != null ? Number(b.min_races_to_qualify) : null;
     const result = await db.query(
       `INSERT INTO series (club_id, name, season_year, throwout_rule, spinnaker_mode, notes, min_races_to_qualify)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [req.club.club_id, b.name, b.season_year, b.throwout_rule ?? null, b.spinnaker_mode ?? 'per_race', b.notes ?? null, b.min_races_to_qualify ?? null]
+      [req.club.club_id, b.name, b.season_year, b.throwout_rule ?? null, b.spinnaker_mode ?? 'per_race', b.notes ?? null, minRaces]
     );
     res.status(201).json(result.rows[0]);
   })

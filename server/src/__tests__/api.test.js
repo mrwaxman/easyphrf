@@ -414,6 +414,26 @@ describe('admin races: score / publish / revise', () => {
   });
 });
 
+describe('admin series CRUD', () => {
+  test('POST without min_races_to_qualify succeeds and stores null', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/series')
+      .set(ADMIN)
+      .send({ name: 'No Min', season_year: 2026 });
+    expect(res.status).toBe(201);
+    expect(res.body.min_races_to_qualify).toBeNull();
+  });
+
+  test('POST with min_races_to_qualify stores the value', async () => {
+    const res = await request(app)
+      .post('/api/v1/admin/series')
+      .set(ADMIN)
+      .send({ name: 'Has Min', season_year: 2026, min_races_to_qualify: 3 });
+    expect(res.status).toBe(201);
+    expect(res.body.min_races_to_qualify).toBe(3);
+  });
+});
+
 describe('admin series recalculate', () => {
   test('recalculate produces standings across published races', async () => {
     const series = (
@@ -431,6 +451,25 @@ describe('admin series recalculate', () => {
     expect(res.body.standings).toHaveLength(3);
     expect(res.body.standings[0].rank).toBe(1);
     expect(res.body.standings[0].total_points).toBe(1); // race winner
+  });
+
+  test('recalculate with min_races_to_qualify=2 marks one-race boats unqualified', async () => {
+    const series = (
+      await db.query(
+        `INSERT INTO series (club_id, name, season_year, min_races_to_qualify) VALUES ($1, 'MinTest', 2026, 2) RETURNING *`,
+        [club.club_id]
+      )
+    ).rows[0];
+    // One published race — each boat has raced exactly once, below the threshold of 2.
+    await createScoredRace(club.club_id, { publish: true, name: 'R1', seriesId: series.series_id });
+
+    const res = await request(app)
+      .post(`/api/v1/admin/series/${series.series_id}/recalculate`)
+      .set(ADMIN);
+    expect(res.status).toBe(200);
+    // All boats have 1 race < min 2, so none are ranked.
+    expect(res.body.standings.every((s) => s.rank === null)).toBe(true);
+    expect(res.body.standings.every((s) => s.qualified === false)).toBe(true);
   });
 });
 
