@@ -1,6 +1,7 @@
 /**
  * Series standings: rank, boat, skipper, total, and one column per race.
  * Throwout (discarded) scores are struck through.
+ * Unqualified boats (below min_races_to_qualify) shown in italics with no rank.
  */
 export function StandingsTable({ races = [], standings = [] }) {
   return (
@@ -21,10 +22,18 @@ export function StandingsTable({ races = [], standings = [] }) {
       <tbody>
         {standings.map((s) => {
           const perRace = new Map((s.perRace || []).map((p) => [p.raceId, p]));
+          const unqualified = s.qualified === false;
           return (
-            <tr key={s.boatId} className="border-b last:border-0" data-testid="standing-row">
-              <td className="px-2 py-1">{s.rank}</td>
-              <td className="px-2 py-1 font-medium">{s.boat ? s.boat.boat_name : s.boatId}</td>
+            <tr
+              key={s.boatId}
+              className={`border-b last:border-0 ${unqualified ? 'italic text-slate-400' : ''}`}
+              data-testid="standing-row"
+            >
+              <td className="px-2 py-1">{s.rank ?? '—'}</td>
+              <td className="px-2 py-1 font-medium">
+                {s.boat ? s.boat.boat_name : s.boatId}
+                {unqualified && <span className="ml-1 text-xs not-italic">(provisional)</span>}
+              </td>
               <td className="px-2 py-1">{s.boat ? s.boat.skipper_name : ''}</td>
               <td className="px-2 py-1 font-semibold">{s.total_points}</td>
               {races.map((r) => {

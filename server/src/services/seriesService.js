@@ -21,8 +21,10 @@ async function buildRaceResults(seriesId) {
   const raceResults = [];
   for (const race of races) {
     const entriesRes = await db.query(
-      `SELECT boat_id, fleet_id, finish_status, fleet_place
-         FROM race_entries WHERE race_id = $1`,
+      `SELECT re.boat_id, re.fleet_id, re.finish_status, re.fleet_place, f.name AS fleet_name
+         FROM race_entries re
+         JOIN fleets f ON f.fleet_id = re.fleet_id
+        WHERE re.race_id = $1`,
       [race.race_id]
     );
     const entries = entriesRes.rows;
@@ -38,6 +40,7 @@ async function buildRaceResults(seriesId) {
       results: entries.map((e) => ({
         boatId: e.boat_id,
         fleetId: e.fleet_id,
+        fleetName: e.fleet_name,
         finishStatus: e.finish_status,
         fleetPlace: e.fleet_place,
         fleetSize: fleetSize.get(e.fleet_id),
@@ -76,7 +79,19 @@ async function computeStandings(clubId, seriesId) {
     boat: boatById.get(s.boatId) || null,
   }));
 
-  return { series, races, standings: decorated };
+  // Group by fleet name (stable insertion order = the order boats first appear in that fleet).
+  const fleetMap = new Map();
+  for (const s of decorated) {
+    const key = s.fleetName || 'Fleet';
+    if (!fleetMap.has(key)) fleetMap.set(key, []);
+    fleetMap.get(key).push(s);
+  }
+  const fleetStandings = [...fleetMap.entries()].map(([fleetName, standings]) => ({
+    fleetName,
+    standings,
+  }));
+
+  return { series, races, standings: decorated, fleetStandings };
 }
 
 /**

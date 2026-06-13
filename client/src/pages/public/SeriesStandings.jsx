@@ -26,17 +26,33 @@ export default function SeriesStandings() {
         </a>
       </div>
       <AsyncBoundary state={seriesState}>
-        {(data) => (
-          <div>
-            <h1 className="text-2xl font-bold text-brand-700">{data.series.name}</h1>
-            <p className="mb-4 text-sm text-slate-500">Season {data.series.season_year}</p>
-            {data.standings.length === 0 ? (
-              <p className="text-slate-500">No scored races in this series yet.</p>
-            ) : (
-              <StandingsTable races={data.races} standings={data.standings} />
-            )}
-          </div>
-        )}
+        {(data) => {
+          const fleetSections =
+            data.fleetStandings && data.fleetStandings.length > 0
+              ? data.fleetStandings
+              : [{ fleetName: null, standings: data.standings || [] }];
+          const hasStandings = fleetSections.some((fs) => fs.standings.length > 0);
+          return (
+            <div>
+              <h1 className="text-2xl font-bold text-brand-700">{data.series.name}</h1>
+              <p className="mb-4 text-sm text-slate-500">Season {data.series.season_year}</p>
+              {!hasStandings ? (
+                <p className="text-slate-500">No scored races in this series yet.</p>
+              ) : (
+                fleetSections.map((fs, i) => (
+                  <div key={fs.fleetName || i} className={i > 0 ? 'mt-6' : ''}>
+                    {fs.fleetName && (
+                      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                        {fs.fleetName}
+                      </h2>
+                    )}
+                    <StandingsTable races={data.races} standings={fs.standings} />
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        }}
       </AsyncBoundary>
     </Layout>
   );

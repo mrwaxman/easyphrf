@@ -337,6 +337,7 @@ function racePoints(result) {
  */
 function scoreSeriesStandings(series, raceResults) {
   const rules = parseThrowoutRule(series && series.throwout_rule);
+  const minRaces = (series && series.min_races_to_qualify) ?? 1;
 
   // Order races chronologically so "most recent" is well defined. Stable sort
   // by date string (ISO/Date both compare correctly via getTime fallback).
@@ -351,10 +352,11 @@ function scoreSeriesStandings(series, raceResults) {
   orderedRaces.forEach((race) => {
     race.results.forEach((r) => {
       if (!boats.has(r.boatId)) {
-        boats.set(r.boatId, { boatId: r.boatId, fleetId: r.fleetId, lines: [] });
+        boats.set(r.boatId, { boatId: r.boatId, fleetId: r.fleetId, fleetName: r.fleetName, lines: [] });
       }
       const boat = boats.get(r.boatId);
       boat.fleetId = r.fleetId ?? boat.fleetId; // keep most recent fleet
+      boat.fleetName = r.fleetName ?? boat.fleetName;
       boat.lines.push({
         raceId: race.raceId,
         raceDate: race.raceDate,
@@ -396,30 +398,52 @@ function scoreSeriesStandings(series, raceResults) {
     standings.push({
       boatId: boat.boatId,
       fleetId: boat.fleetId,
+      fleetName: boat.fleetName,
       total_points: total,
       races_sailed: racesSailed,
       throwouts,
       perRace,
+      qualified: racesSailed >= minRaces,
       rank: null,
     });
   }
 
-  // Rank: lowest total wins. Tie-break by the most recent race each boat sailed
-  // (lower points in that race ranks higher).
-  const mostRecentPoints = (s) => {
-    const last = s.perRace[s.perRace.length - 1];
-    return last ? last.points : Infinity;
-  };
-  standings.sort(
-    (a, b) =>
-      a.total_points - b.total_points ||
-      mostRecentPoints(a) - mostRecentPoints(b)
-  );
-  standings.forEach((s, i) => {
+  // A8.1 + A8.2 tiebreak comparator (used after total_points are equal).
+  // A8.1: compare count of best places (sorted kept scores lexicographically).
+  // A8.2: working backward from most recent race, first race where scores differ.
+  function breakTie(a, b) {
+    // A8.1
+    const aKept = a.perRace.filter((p) => !p.dropped).map((p) => p.points).sort((x, y) => x - y);
+    const bKept = b.perRace.filter((p) => !p.dropped).map((p) => p.points).sort((x, y) => x - y);
+    const len = Math.max(aKept.length, bKept.length);
+    for (let i = 0; i < len; i++) {
+      const ap = i < aKept.length ? aKept[i] : Infinity;
+      const bp = i < bKept.length ? bKept[i] : Infinity;
+      if (ap !== bp) return ap - bp;
+    }
+    // A8.2
+    const aMap = new Map(a.perRace.map((p) => [p.raceId, p.points]));
+    const bMap = new Map(b.perRace.map((p) => [p.raceId, p.points]));
+    for (let i = orderedRaces.length - 1; i >= 0; i--) {
+      const raceId = orderedRaces[i].raceId;
+      const ap = aMap.has(raceId) ? aMap.get(raceId) : Infinity;
+      const bp = bMap.has(raceId) ? bMap.get(raceId) : Infinity;
+      if (ap !== bp) return ap - bp;
+    }
+    return 0;
+  }
+
+  // Separate qualified boats (sailed >= minRaces) from unqualified.
+  // Only qualified boats receive ranks.
+  const qualifiedBoats = standings.filter((s) => s.qualified);
+  const unqualifiedBoats = standings.filter((s) => !s.qualified);
+
+  qualifiedBoats.sort((a, b) => a.total_points - b.total_points || breakTie(a, b));
+  qualifiedBoats.forEach((s, i) => {
     s.rank = i + 1;
   });
 
-  return standings;
+  return [...qualifiedBoats, ...unqualifiedBoats];
 }
 
 module.exports = {

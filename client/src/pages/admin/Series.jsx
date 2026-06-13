@@ -5,7 +5,13 @@ import { AdminLayout } from '../../components/AdminLayout.jsx';
 import { AsyncBoundary } from '../../components/AsyncBoundary.jsx';
 import { StandingsTable } from '../../components/StandingsTable.jsx';
 
-const BLANK = { name: '', season_year: new Date().getFullYear(), throwout_rule: '', notes: '' };
+const BLANK = {
+  name: '',
+  season_year: new Date().getFullYear(),
+  throwout_rule: '',
+  min_races_to_qualify: 1,
+  notes: '',
+};
 
 export default function Series() {
   const apiC = useApi();
@@ -18,7 +24,11 @@ export default function Series() {
     e.preventDefault();
     setError(null);
     try {
-      await apiC.createSeries({ ...form, season_year: Number(form.season_year) });
+      await apiC.createSeries({
+        ...form,
+        season_year: Number(form.season_year),
+        min_races_to_qualify: Number(form.min_races_to_qualify),
+      });
       setForm(BLANK);
       state.reload();
     } catch (err) {
@@ -31,16 +41,50 @@ export default function Series() {
     setStandings(data);
   };
 
+  // Build fleet sections: use fleetStandings if available, fall back to single section.
+  const fleetSections = standings
+    ? standings.fleetStandings && standings.fleetStandings.length > 0
+      ? standings.fleetStandings
+      : [{ fleetName: null, standings: standings.standings || [] }]
+    : [];
+
   return (
     <AdminLayout>
       <h1 className="mb-4 text-2xl font-bold">Series</h1>
       {error && <p className="mb-3 rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
 
       <form onSubmit={create} className="mb-6 grid grid-cols-2 gap-3 rounded border bg-white p-4 md:grid-cols-4">
-        <input placeholder="Name" className="rounded border px-2 py-1 text-sm" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <input placeholder="Season year" className="rounded border px-2 py-1 text-sm" value={form.season_year} onChange={(e) => setForm({ ...form, season_year: e.target.value })} />
-        <input placeholder="Throwout rule e.g. 1 throwout after 4 races" className="rounded border px-2 py-1 text-sm md:col-span-2" value={form.throwout_rule} onChange={(e) => setForm({ ...form, throwout_rule: e.target.value })} />
-        <button type="submit" className="rounded bg-brand-600 px-3 py-1.5 text-sm text-white">Create Series</button>
+        <input
+          placeholder="Name"
+          className="rounded border px-2 py-1 text-sm"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+        <input
+          placeholder="Season year"
+          className="rounded border px-2 py-1 text-sm"
+          value={form.season_year}
+          onChange={(e) => setForm({ ...form, season_year: e.target.value })}
+        />
+        <input
+          placeholder="Throwout rule e.g. 1 throwout after 4 races"
+          className="rounded border px-2 py-1 text-sm md:col-span-2"
+          value={form.throwout_rule}
+          onChange={(e) => setForm({ ...form, throwout_rule: e.target.value })}
+        />
+        <label className="flex flex-col gap-1 text-xs text-slate-500">
+          Min races to qualify
+          <input
+            type="number"
+            min="1"
+            className="rounded border px-2 py-1 text-sm"
+            value={form.min_races_to_qualify}
+            onChange={(e) => setForm({ ...form, min_races_to_qualify: e.target.value })}
+          />
+        </label>
+        <button type="submit" className="rounded bg-brand-600 px-3 py-1.5 text-sm text-white">
+          Create Series
+        </button>
       </form>
 
       <AsyncBoundary state={state}>
@@ -50,9 +94,14 @@ export default function Series() {
               <li key={s.series_id} className="flex items-center justify-between p-3">
                 <span>
                   <strong>{s.name}</strong> <span className="text-slate-400">· {s.season_year}</span>
-                  {s.throwout_rule && <span className="ml-2 text-xs text-slate-500">({s.throwout_rule})</span>}
+                  {s.throwout_rule && (
+                    <span className="ml-2 text-xs text-slate-500">({s.throwout_rule})</span>
+                  )}
                 </span>
-                <button onClick={() => recalc(s.series_id)} className="rounded border px-3 py-1 text-sm hover:bg-slate-50">
+                <button
+                  onClick={() => recalc(s.series_id)}
+                  className="rounded border px-3 py-1 text-sm hover:bg-slate-50"
+                >
                   Recalculate standings
                 </button>
               </li>
@@ -64,11 +113,20 @@ export default function Series() {
 
       {standings && (
         <section className="mt-6 rounded border bg-white p-4">
-          <h2 className="mb-2 text-lg font-semibold">{standings.series.name} — Standings</h2>
-          {standings.standings.length === 0 ? (
+          <h2 className="mb-4 text-lg font-semibold">{standings.series.name} — Standings</h2>
+          {fleetSections.length === 0 || fleetSections.every((fs) => fs.standings.length === 0) ? (
             <p className="text-slate-500">No scored races yet.</p>
           ) : (
-            <StandingsTable races={standings.races} standings={standings.standings} />
+            fleetSections.map((fs, i) => (
+              <div key={fs.fleetName || i} className={i > 0 ? 'mt-6' : ''}>
+                {fs.fleetName && (
+                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-600">
+                    {fs.fleetName}
+                  </h3>
+                )}
+                <StandingsTable races={standings.races} standings={fs.standings} />
+              </div>
+            ))
           )}
         </section>
       )}

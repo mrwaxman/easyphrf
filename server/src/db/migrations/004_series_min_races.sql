@@ -1,0 +1,1 @@
+ALTER TABLE series ADD COLUMN min_races_to_qualify INTEGER NOT NULL DEFAULT 1
