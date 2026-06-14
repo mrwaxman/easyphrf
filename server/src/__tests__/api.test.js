@@ -447,6 +447,89 @@ describe('admin series CRUD', () => {
   });
 });
 
+describe('admin series update', () => {
+  test('PUT updates name, season_year, and min_races_to_qualify', async () => {
+    const created = (
+      await request(app).post('/api/v1/admin/series').set(ADMIN).send({ name: 'Old', season_year: 2025 })
+    ).body;
+    const res = await request(app)
+      .put(`/api/v1/admin/series/${created.series_id}`)
+      .set(ADMIN)
+      .send({ name: 'New', season_year: 2027, min_races_to_qualify: 3 });
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('New');
+    expect(res.body.season_year).toBe(2027);
+    expect(res.body.min_races_to_qualify).toBe(3);
+  });
+
+  test('PUT throwouts_enabled=false → recalculate drops nothing', async () => {
+    const sRes = (
+      await request(app).post('/api/v1/admin/series').set(ADMIN).send({
+        name: 'TogOff',
+        season_year: 2026,
+        throwouts_enabled: true,
+        throwout_tiers: [{ after_races: 1, throwouts: 1 }],
+      })
+    ).body;
+    const sid = sRes.series_id;
+    await createScoredRace(club.club_id, { publish: true, name: 'TO1', seriesId: sid, sailPrefix: 'TO' });
+
+    // with throwouts ON, boats drop their only race → total = 0
+    const r1 = (await request(app).post(`/api/v1/admin/series/${sid}/recalculate`).set(ADMIN)).body;
+    expect(r1.standings.every((s) => s.throwouts.length === 1)).toBe(true);
+    expect(r1.standings.every((s) => s.total_points === 0)).toBe(true);
+
+    await request(app).put(`/api/v1/admin/series/${sid}`).set(ADMIN).send({ throwouts_enabled: false });
+
+    // with throwouts OFF, all scores count
+    const r2 = (await request(app).post(`/api/v1/admin/series/${sid}/recalculate`).set(ADMIN)).body;
+    expect(r2.standings.every((s) => s.throwouts.length === 0)).toBe(true);
+    expect(r2.standings.every((s) => s.total_points > 0)).toBe(true);
+  });
+
+  test('PUT throwouts_enabled=true with tier → recalculate applies throwout', async () => {
+    const sRes = (
+      await request(app).post('/api/v1/admin/series').set(ADMIN).send({ name: 'TurnOn', season_year: 2026 })
+    ).body;
+    const sid = sRes.series_id;
+    await createScoredRace(club.club_id, { publish: true, name: 'TN1', seriesId: sid, sailPrefix: 'TN' });
+
+    // throwouts OFF: no drops
+    const r1 = (await request(app).post(`/api/v1/admin/series/${sid}/recalculate`).set(ADMIN)).body;
+    expect(r1.standings.every((s) => s.throwouts.length === 0)).toBe(true);
+
+    await request(app)
+      .put(`/api/v1/admin/series/${sid}`)
+      .set(ADMIN)
+      .send({ throwouts_enabled: true, throwout_tiers: [{ after_races: 1, throwouts: 1 }] });
+
+    // throwouts ON: boats drop their only race → total = 0
+    const r2 = (await request(app).post(`/api/v1/admin/series/${sid}/recalculate`).set(ADMIN)).body;
+    expect(r2.standings.every((s) => s.throwouts.length === 1)).toBe(true);
+    expect(r2.standings.every((s) => s.total_points === 0)).toBe(true);
+  });
+
+  test('assigning a race to a series feeds standings; unassigning removes it', async () => {
+    const sRes = (
+      await request(app).post('/api/v1/admin/series').set(ADMIN).send({ name: 'Assign', season_year: 2026 })
+    ).body;
+    const sid = sRes.series_id;
+
+    const r0 = (await request(app).post(`/api/v1/admin/series/${sid}/recalculate`).set(ADMIN)).body;
+    expect(r0.standings).toHaveLength(0);
+
+    const { race } = await createScoredRace(club.club_id, { publish: true, name: 'AR1', seriesId: null, sailPrefix: 'AR' });
+
+    await request(app).put(`/api/v1/admin/races/${race.race_id}`).set(ADMIN).send({ series_id: sid });
+    const r1 = (await request(app).post(`/api/v1/admin/series/${sid}/recalculate`).set(ADMIN)).body;
+    expect(r1.standings).toHaveLength(3);
+
+    await request(app).put(`/api/v1/admin/races/${race.race_id}`).set(ADMIN).send({ series_id: null });
+    const r2 = (await request(app).post(`/api/v1/admin/series/${sid}/recalculate`).set(ADMIN)).body;
+    expect(r2.standings).toHaveLength(0);
+  });
+});
+
 describe('admin series recalculate', () => {
   test('recalculate produces standings across published races', async () => {
     const series = (

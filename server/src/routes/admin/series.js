@@ -47,6 +47,8 @@ router.put(
   asyncHandler(async (req, res) => {
     ensureEnum(req.body.spinnaker_mode, SPINNAKER_MODES, 'spinnaker_mode');
     const fields = pickDefined(req.body, EDITABLE);
+    if (fields.throwout_tiers !== undefined) fields.throwout_tiers = JSON.stringify(fields.throwout_tiers);
+    if (fields.min_races_to_qualify != null) fields.min_races_to_qualify = Number(fields.min_races_to_qualify);
     const { clause, values, nextIndex, isEmpty } = buildUpdate(fields);
     if (isEmpty) throw badRequest('No updatable fields supplied');
     const result = await db.query(
