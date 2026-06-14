@@ -415,13 +415,26 @@ describe('admin races: score / publish / revise', () => {
 });
 
 describe('admin series CRUD', () => {
-  test('POST without min_races_to_qualify succeeds and stores null', async () => {
+  test('POST without throwout or min fields uses defaults', async () => {
     const res = await request(app)
       .post('/api/v1/admin/series')
       .set(ADMIN)
-      .send({ name: 'No Min', season_year: 2026 });
+      .send({ name: 'Defaults', season_year: 2026 });
     expect(res.status).toBe(201);
+    expect(res.body.throwouts_enabled).toBe(false);
+    expect(res.body.throwout_tiers).toEqual([]);
     expect(res.body.min_races_to_qualify).toBeNull();
+  });
+
+  test('POST with throwouts_enabled=true and tiers stores them', async () => {
+    const tiers = [{ after_races: 4, throwouts: 1 }];
+    const res = await request(app)
+      .post('/api/v1/admin/series')
+      .set(ADMIN)
+      .send({ name: 'With Throwouts', season_year: 2026, throwouts_enabled: true, throwout_tiers: tiers });
+    expect(res.status).toBe(201);
+    expect(res.body.throwouts_enabled).toBe(true);
+    expect(res.body.throwout_tiers).toEqual(tiers);
   });
 
   test('POST with min_races_to_qualify stores the value', async () => {

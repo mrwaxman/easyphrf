@@ -1,10 +1,6 @@
 'use strict';
 
-const {
-  scoreSeriesStandings,
-  parseThrowoutRule,
-  allowedThrowouts,
-} = require('../index');
+const { scoreSeriesStandings } = require('../index');
 
 const DEFAULT_FLEET = 'F';
 
@@ -28,32 +24,121 @@ function race(raceId, raceDate, lines, fleetSize, fleetId = DEFAULT_FLEET) {
   };
 }
 
-describe('parseThrowoutRule', () => {
-  test('parses single and multi-threshold rules', () => {
-    expect(parseThrowoutRule('1 throwout after 4 races')).toEqual([{ throwouts: 1, after: 4 }]);
-    expect(parseThrowoutRule('1 throwout after 4 races, 2 after 8 races')).toEqual([
-      { throwouts: 1, after: 4 },
-      { throwouts: 2, after: 8 },
-    ]);
+// Structured series configs used across tests.
+const NO_THROWOUTS = { throwouts_enabled: false };
+const ONE_TIER     = { throwouts_enabled: true,  throwout_tiers: [{ after_races: 4, throwouts: 1 }] };
+const TWO_TIERS    = { throwouts_enabled: true,  throwout_tiers: [{ after_races: 4, throwouts: 1 }, { after_races: 8, throwouts: 2 }] };
+
+// ─── Throwout math — structured tiers ────────────────────────────────────────
+
+describe('throwout math — structured tiers', () => {
+  // ── Throwouts OFF ────────────────────────────────────────────────────────────
+  test('throwouts OFF: every race counts, none dropped', () => {
+    // b1: R1=1 R2=1 R3=4 R4=1 in fleet-of-5. With throwouts off, all 4 count.
+    // Expected total = 1+1+4+1 = 7 (nothing dropped)
+    const races = [
+      race('r1', '2026-05-01', [['b1', 1]], 5),
+      race('r2', '2026-05-08', [['b1', 1]], 5),
+      race('r3', '2026-05-15', [['b1', 4]], 5),
+      race('r4', '2026-05-22', [['b1', 1]], 5),
+    ];
+    const [s] = scoreSeriesStandings(NO_THROWOUTS, races);
+    expect(s.total_points).toBe(7);
+    expect(s.throwouts).toHaveLength(0);
+    expect(s.perRace.every((p) => !p.dropped)).toBe(true);
   });
 
-  test('returns [] for empty/garbage', () => {
-    expect(parseThrowoutRule(null)).toEqual([]);
-    expect(parseThrowoutRule('')).toEqual([]);
-    expect(parseThrowoutRule('no rule here')).toEqual([]);
+  // ── Single tier — hand-computed, auditable table ─────────────────────────────
+  test('single tier (1 throwout after 4 races): worst race dropped', () => {
+    // b1: R1=1 R2=1 R3=4 R4=1 in fleet-of-5.
+    // Threshold reached at 4 races → drop 1 worst.
+    // Worst = R3=4. Kept: R1=1 R2=1 R4=1. Expected total = 3.
+    const races = [
+      race('r1', '2026-05-01', [['b1', 1]], 5),
+      race('r2', '2026-05-08', [['b1', 1]], 5),
+      race('r3', '2026-05-15', [['b1', 4]], 5),
+      race('r4', '2026-05-22', [['b1', 1]], 5),
+    ];
+    const [s] = scoreSeriesStandings(ONE_TIER, races);
+
+    console.table([{
+      boat:             'b1',
+      race_scores:      'R1=1 R2=1 R3=4 R4=1',
+      tier:             '1 drop after 4 races',
+      expected_dropped: 'R3=4',
+      expected_total:   3,
+      actual_dropped:   `${s.throwouts[0]?.raceId}=${s.throwouts[0]?.points}`,
+      actual_total:     s.total_points,
+      ok:               s.total_points === 3 && s.throwouts[0]?.raceId === 'r3' ? '✓' : '✗',
+    }]);
+
+    expect(s.races_sailed).toBe(4);
+    expect(s.total_points).toBe(3);
+    expect(s.throwouts).toHaveLength(1);
+    expect(s.throwouts[0]).toMatchObject({ raceId: 'r3', points: 4 });
+    expect(s.perRace.find((p) => p.raceId === 'r3').dropped).toBe(true);
+    expect(s.perRace.filter((p) => !p.dropped).reduce((n, p) => n + p.points, 0)).toBe(3);
+  });
+
+  // ── Below threshold → no throwout ────────────────────────────────────────────
+  test('below threshold (<4 races): no throwout applied', () => {
+    // b1 has only 3 races. Tier requires ≥4 → zero drops. All count.
+    // b1: R1=1 R2=5 R3=1. Expected total = 7.
+    const races = [
+      race('r1', '2026-05-01', [['b1', 1]], 5),
+      race('r2', '2026-05-08', [['b1', 5]], 5),
+      race('r3', '2026-05-15', [['b1', 1]], 5),
+    ];
+    const [s] = scoreSeriesStandings(ONE_TIER, races);
+    expect(s.races_sailed).toBe(3);
+    expect(s.throwouts).toHaveLength(0);
+    expect(s.total_points).toBe(7);
+  });
+
+  // ── Two tiers ────────────────────────────────────────────────────────────────
+  test('two tiers (1 after 4, 2 after 8): with 8 races, two worst dropped', () => {
+    // b1: six 1s (R1–R6), R7=5, R8=4. Fleet-of-6 for all races.
+    // 8 races → tier 2 applies → drop 2 worst.
+    // Worst two: R7=5, R8=4. Kept: six 1s. Expected total = 6.
+    const races = [
+      race('r1', '2026-05-01', [['b1', 1]], 6),
+      race('r2', '2026-05-02', [['b1', 1]], 6),
+      race('r3', '2026-05-03', [['b1', 1]], 6),
+      race('r4', '2026-05-04', [['b1', 1]], 6),
+      race('r5', '2026-05-05', [['b1', 1]], 6),
+      race('r6', '2026-05-06', [['b1', 1]], 6),
+      race('r7', '2026-05-07', [['b1', 5]], 6),
+      race('r8', '2026-05-08', [['b1', 4]], 6),
+    ];
+    const [s8] = scoreSeriesStandings(TWO_TIERS, races);
+    expect(s8.races_sailed).toBe(8);
+    expect(s8.total_points).toBe(6);
+    expect(s8.throwouts.map((t) => t.points).sort((a, b) => a - b)).toEqual([4, 5]);
+
+    // With only 4 races, tier 1 applies → only 1 drop.
+    const [s4] = scoreSeriesStandings(TWO_TIERS, races.slice(0, 4));
+    expect(s4.throwouts).toHaveLength(1);
+  });
+
+  // ── Migration fallback ───────────────────────────────────────────────────────
+  test('migration fallback: throwouts_enabled=false → all races count regardless of tiers field', () => {
+    // Simulates a series row that existed before the structured-throwouts migration.
+    // After migration 006, such rows have throwouts_enabled=false (the safe default).
+    // The engine must not apply any drops.
+    const series = { throwouts_enabled: false, throwout_tiers: [{ after_races: 4, throwouts: 1 }] };
+    const races = [
+      race('r1', '2026-05-01', [['b1', 1]], 5),
+      race('r2', '2026-05-08', [['b1', 1]], 5),
+      race('r3', '2026-05-15', [['b1', 4]], 5),
+      race('r4', '2026-05-22', [['b1', 1]], 5),
+    ];
+    const [s] = scoreSeriesStandings(series, races);
+    expect(s.total_points).toBe(7); // 1+1+4+1, nothing dropped
+    expect(s.throwouts).toHaveLength(0);
   });
 });
 
-describe('allowedThrowouts', () => {
-  const rules = parseThrowoutRule('1 throwout after 4 races, 2 after 8 races');
-  test('applies the highest reached threshold', () => {
-    expect(allowedThrowouts(rules, 3)).toBe(0);
-    expect(allowedThrowouts(rules, 4)).toBe(1);
-    expect(allowedThrowouts(rules, 7)).toBe(1);
-    expect(allowedThrowouts(rules, 8)).toBe(2);
-    expect(allowedThrowouts(rules, 12)).toBe(2);
-  });
-});
+// ─── Full standings engine ────────────────────────────────────────────────────
 
 describe('scoreSeriesStandings', () => {
   test('3-race series, 4 boats, no throwouts: totals and ranks', () => {
@@ -62,7 +147,7 @@ describe('scoreSeriesStandings', () => {
       race('r2', '2026-05-08', [['b1', 2], ['b2', 1], ['b3', 4], ['b4', 3]]),
       race('r3', '2026-05-15', [['b1', 1], ['b2', 3], ['b3', 2], ['b4', 4]]),
     ];
-    const standings = scoreSeriesStandings({ throwout_rule: null }, races);
+    const standings = scoreSeriesStandings(NO_THROWOUTS, races);
     const byBoat = Object.fromEntries(standings.map((s) => [s.boatId, s]));
 
     expect(byBoat.b1.total_points).toBe(4);
@@ -79,110 +164,60 @@ describe('scoreSeriesStandings', () => {
     expect(byBoat.b1.throwouts).toEqual([]);
   });
 
-  test('"1 throwout after 4 races": worst race is dropped', () => {
-    const races = [
-      race('r1', '2026-05-01', [['b1', 1]], 5),
-      race('r2', '2026-05-08', [['b1', 1]], 5),
-      race('r3', '2026-05-15', [['b1', 4]], 5),
-      race('r4', '2026-05-22', [['b1', 1]], 5),
-    ];
-    const [s] = scoreSeriesStandings({ throwout_rule: '1 throwout after 4 races' }, races);
-
-    expect(s.races_sailed).toBe(4);
-    expect(s.total_points).toBe(3); // 1 + 1 + 1, the 4 dropped
-    expect(s.throwouts).toHaveLength(1);
-    expect(s.throwouts[0]).toMatchObject({ raceId: 'r3', points: 4 });
-    expect(s.perRace.find((p) => p.raceId === 'r3').dropped).toBe(true);
-  });
-
-  test('"1 after 4, 2 after 8": both thresholds honored', () => {
-    const eight = [
-      race('r1', '2026-05-01', [['b1', 1]], 6),
-      race('r2', '2026-05-02', [['b1', 1]], 6),
-      race('r3', '2026-05-03', [['b1', 1]], 6),
-      race('r4', '2026-05-04', [['b1', 1]], 6),
-      race('r5', '2026-05-05', [['b1', 1]], 6),
-      race('r6', '2026-05-06', [['b1', 1]], 6),
-      race('r7', '2026-05-07', [['b1', 5]], 6),
-      race('r8', '2026-05-08', [['b1', 4]], 6),
-    ];
-    const [s8] = scoreSeriesStandings(
-      { throwout_rule: '1 throwout after 4 races, 2 after 8 races' },
-      eight
-    );
-    expect(s8.races_sailed).toBe(8);
-    expect(s8.total_points).toBe(6); // six 1s kept; 5 and 4 dropped
-    expect(s8.throwouts.map((t) => t.points).sort((a, b) => a - b)).toEqual([4, 5]);
-
-    // With only 4 races the same rule drops just one.
-    const [s4] = scoreSeriesStandings(
-      { throwout_rule: '1 throwout after 4 races, 2 after 8 races' },
-      eight.slice(0, 4)
-    );
-    expect(s4.throwouts).toHaveLength(1);
-  });
-
   test('DNF scores fleetSize + 1 points', () => {
     const races = [race('r1', '2026-05-01', [['b1', 'dnf']], 6)];
-    const [s] = scoreSeriesStandings({ throwout_rule: null }, races);
+    const [s] = scoreSeriesStandings(NO_THROWOUTS, races);
     expect(s.total_points).toBe(7); // 6 entries + 1
   });
 
   test('A8.1 then A8.2: equal totals resolved by count-of-places, then most-recent race', () => {
-    // A8.2 case: b1=[1,3] sorted [1,3], b2=[3,1] sorted [1,3] — A8.1 equal.
+    // b1=[1,3] sorted [1,3], b2=[3,1] sorted [1,3] — A8.1 equal.
     // A8.2: R2 b1=3, b2=1 — b2 wins.
     const races = [
       race('r1', '2026-05-01', [['b1', 1], ['b2', 3]]),
       race('r2', '2026-05-08', [['b1', 3], ['b2', 1]]),
     ];
-    const standings = scoreSeriesStandings({ throwout_rule: null }, races);
+    const standings = scoreSeriesStandings(NO_THROWOUTS, races);
     const byBoat = Object.fromEntries(standings.map((s) => [s.boatId, s]));
     expect(byBoat.b1.total_points).toBe(4);
     expect(byBoat.b2.total_points).toBe(4);
-    // A8.1 equal (both have one 1st and one 3rd); A8.2: b2 won R2 (most recent)
     expect(byBoat.b2.rank).toBe(1);
     expect(byBoat.b1.rank).toBe(2);
   });
 
   test('A8.1 breaks tie without needing A8.2', () => {
-    // b1 has two 1sts and one 3rd; b2 has one 1st and two 2nds — same total but different place distribution
-    // b1 total = 1+1+3 = 5; b2 total = 1+2+2 = 5
-    // A8.1: b1 sorted kept [1,1,3]; b2 sorted kept [1,2,2]
-    // Compare position 1: b1=1 < b2=2 → b1 wins A8.1
+    // b1 total=5 (1+1+3), b2 total=5 (1+2+2).
+    // A8.1: b1 sorted kept [1,1,3]; b2 sorted kept [1,2,2].
+    // Position 1: b1=1 < b2=2 → b1 wins.
     const races = [
       race('r1', '2026-05-01', [['b1', 1], ['b2', 1]]),
       race('r2', '2026-05-08', [['b1', 1], ['b2', 2]]),
       race('r3', '2026-05-15', [['b1', 3], ['b2', 2]]),
     ];
-    const standings = scoreSeriesStandings({ throwout_rule: null }, races);
+    const standings = scoreSeriesStandings(NO_THROWOUTS, races);
     const byBoat = Object.fromEntries(standings.map((s) => [s.boatId, s]));
     expect(byBoat.b1.total_points).toBe(5);
     expect(byBoat.b2.total_points).toBe(5);
-    expect(byBoat.b1.rank).toBe(1); // b1 wins A8.1 (more 1sts)
+    expect(byBoat.b1.rank).toBe(1);
     expect(byBoat.b2.rank).toBe(2);
   });
 
   test('minimum races: boats below threshold are unqualified with rank null', () => {
-    // 3 races, min_races_to_qualify = 3
-    // Boat P sails all 3 → qualified
-    // Boat Q sails only 2 → not qualified
     const races = [
       race('r1', '2026-05-01', [['P', 1], ['Q', 2]]),
       race('r2', '2026-05-08', [['P', 1], ['Q', 2]]),
-      race('r3', '2026-05-15', [['P', 1]]),            // Q missed this one
+      race('r3', '2026-05-15', [['P', 1]]),
     ];
-    const standings = scoreSeriesStandings({ throwout_rule: null, min_races_to_qualify: 3 }, races);
+    const standings = scoreSeriesStandings({ ...NO_THROWOUTS, min_races_to_qualify: 3 }, races);
     const byBoat = Object.fromEntries(standings.map((s) => [s.boatId, s]));
 
     expect(byBoat.P.qualified).toBe(true);
     expect(byBoat.P.rank).toBe(1);
-
     expect(byBoat.Q.qualified).toBe(false);
     expect(byBoat.Q.rank).toBeNull();
   });
 
   test('per-fleet: boats in different fleets are tracked separately', () => {
-    // Fleet FA and fleet FB race simultaneously. Points should be fleet-scoped.
     const r1 = {
       raceId: 'r1',
       raceDate: '2026-05-01',
@@ -196,26 +231,19 @@ describe('scoreSeriesStandings', () => {
     const standings = scoreSeriesStandings({}, [r1]);
     const byBoat = Object.fromEntries(standings.map((s) => [s.boatId, s]));
 
-    // Each boat scores its fleet-relative place (not cross-fleet)
     expect(byBoat.a1.total_points).toBe(1);
     expect(byBoat.a2.total_points).toBe(2);
     expect(byBoat.b1.total_points).toBe(1);
     expect(byBoat.b2.total_points).toBe(2);
-
-    // Fleet IDs preserved
     expect(byBoat.a1.fleetId).toBe('FA');
     expect(byBoat.b1.fleetId).toBe('FB');
   });
 
   // ─── Comprehensive worked example ────────────────────────────────────────────
   //
-  // Series: "Summer 2026"
-  //   throwout_rule: "1 throwout after 4 races"
-  //   min_races_to_qualify: 3
+  // Series: throwouts_enabled=true, tiers=[1 after 4], min_races_to_qualify=3
   //
   // Boats: alpha, bravo, charlie, delta
-  //
-  // Race data (all in fleet 'F', fleet sizes noted):
   //
   //   R1 2026-05-01 (4 entries): alpha=1, bravo=2, charlie=3, delta=4
   //   R2 2026-05-08 (4 entries): bravo=1, alpha=2, charlie=3, delta=4
@@ -223,40 +251,23 @@ describe('scoreSeriesStandings', () => {
   //   R4 2026-05-22 (4 entries): bravo=1, alpha=2, charlie=3,   delta=DNF
   //   R5 2026-05-29 (4 entries): alpha=1, bravo=2, charlie=3,   delta=4
   //
-  // Hand-computed per-boat:
+  //  alpha:   [1,2,1,2,1] sailed=5 → drop R4=2  → kept [1,2,1,1]=5
+  //  bravo:   [2,1,2,1,2] sailed=5 → drop R5=2  → kept [2,1,2,1]=6
+  //  charlie: [3,3,4,3,3] sailed=5 → drop R3=4  → kept [3,3,3,3]=12
+  //  delta:   [4,4,—,5,4] sailed=4 → drop R4=5  → kept [4,4,4]=12
   //
-  //  alpha: scores [1,2,1,2,1], sailed=5, throwouts=1
-  //         worst=2 (R2 and R4 tie; drop later = R4)
-  //         kept: R1=1, R2=2, R3=1, R5=1 → total=5
+  //  Tie charlie/delta at 12: A8.1 charlie[3,3,3,3] vs delta[4,4,4] → charlie wins
   //
-  //  bravo: scores [2,1,2,1,2], sailed=5, throwouts=1
-  //         worst=2 (R1,R3,R5; drop latest = R5)
-  //         kept: R1=2, R2=1, R3=2, R4=1 → total=6
-  //
-  //  charlie: scores [3,3,4,3,3], sailed=5, throwouts=1
-  //           worst=4 (R3: DNF in fleet-of-3 → 3+1=4)
-  //           kept: R1=3, R2=3, R4=3, R5=3 → total=12
-  //
-  //  delta: scores [4,4,—,5,4], sailed=4, throwouts=1
-  //         (R3 missed = nothing; R4 DNF in fleet-of-4 → 4+1=5)
-  //         worst=5 (R4); kept: R1=4, R2=4, R5=4 → total=12
-  //
-  // Tie (charlie 12 vs delta 12):
-  //   A8.1: charlie kept sorted [3,3,3,3]; delta kept sorted [4,4,4]
-  //         position 0: charlie=3 < delta=4 → charlie wins A8.1
-  //
-  // Final ranking: alpha=1, bravo=2, charlie=3, delta=4
+  //  Final: alpha=1, bravo=2, charlie=3, delta=4
   // ────────────────────────────────────────────────────────────────────────────
 
   test('worked 5-race example: totals, throwouts, DNF, A8.1 tiebreak, missed race', () => {
-    const SERIES = { throwout_rule: '1 throwout after 4 races', min_races_to_qualify: 3 };
+    const SERIES = { ...ONE_TIER, min_races_to_qualify: 3 };
 
     const races = [
       race('r1', '2026-05-01', [['alpha', 1], ['bravo', 2], ['charlie', 3], ['delta', 4]]),
       race('r2', '2026-05-08', [['bravo', 1], ['alpha', 2], ['charlie', 3], ['delta', 4]]),
-      // R3: 3-entry fleet (delta absent); charlie DNF → 3+1=4 pts
       race('r3', '2026-05-15', [['alpha', 1], ['bravo', 2], ['charlie', 'dnf']], 3),
-      // R4: 4-entry fleet; delta DNF → 4+1=5 pts
       race('r4', '2026-05-22', [['bravo', 1], ['alpha', 2], ['charlie', 3], ['delta', 'dnf']], 4),
       race('r5', '2026-05-29', [['alpha', 1], ['bravo', 2], ['charlie', 3], ['delta', 4]]),
     ];
@@ -264,12 +275,11 @@ describe('scoreSeriesStandings', () => {
     const standings = scoreSeriesStandings(SERIES, races);
     const byBoat = Object.fromEntries(standings.map((s) => [s.boatId, s]));
 
-    // Print expected-vs-actual for auditability
     const EXPECTED = {
-      alpha:   { total: 5,  rank: 1, throwoutRace: 'r4', throwoutPts: 2  },
-      bravo:   { total: 6,  rank: 2, throwoutRace: 'r5', throwoutPts: 2  },
-      charlie: { total: 12, rank: 3, throwoutRace: 'r3', throwoutPts: 4  },
-      delta:   { total: 12, rank: 4, throwoutRace: 'r4', throwoutPts: 5  },
+      alpha:   { total: 5,  rank: 1, throwoutRace: 'r4', throwoutPts: 2 },
+      bravo:   { total: 6,  rank: 2, throwoutRace: 'r5', throwoutPts: 2 },
+      charlie: { total: 12, rank: 3, throwoutRace: 'r3', throwoutPts: 4 },
+      delta:   { total: 12, rank: 4, throwoutRace: 'r4', throwoutPts: 5 },
     };
     console.table(
       Object.entries(EXPECTED).map(([boat, exp]) => {
@@ -287,41 +297,31 @@ describe('scoreSeriesStandings', () => {
       })
     );
 
-    // — Totals —
     expect(byBoat.alpha.total_points).toBe(5);
     expect(byBoat.bravo.total_points).toBe(6);
     expect(byBoat.charlie.total_points).toBe(12);
     expect(byBoat.delta.total_points).toBe(12);
 
-    // — Ranks —
     expect(byBoat.alpha.rank).toBe(1);
     expect(byBoat.bravo.rank).toBe(2);
-    expect(byBoat.charlie.rank).toBe(3); // A8.1 beats delta
+    expect(byBoat.charlie.rank).toBe(3);
     expect(byBoat.delta.rank).toBe(4);
 
-    // — Throwouts —
-    expect(byBoat.alpha.throwouts).toHaveLength(1);
     expect(byBoat.alpha.throwouts[0]).toMatchObject({ raceId: 'r4', points: 2 });
     expect(byBoat.bravo.throwouts[0]).toMatchObject({ raceId: 'r5', points: 2 });
     expect(byBoat.charlie.throwouts[0]).toMatchObject({ raceId: 'r3', points: 4 });
     expect(byBoat.delta.throwouts[0]).toMatchObject({ raceId: 'r4', points: 5 });
 
-    // — DNF penalty: fleet-size + 1 —
-    // charlie R3: fleet-of-3 → DNF = 4 pts
-    expect(byBoat.charlie.perRace.find((p) => p.raceId === 'r3').points).toBe(4);
-    // delta R4: fleet-of-4 → DNF = 5 pts
-    expect(byBoat.delta.perRace.find((p) => p.raceId === 'r4').points).toBe(5);
+    // DNF penalties
+    expect(byBoat.charlie.perRace.find((p) => p.raceId === 'r3').points).toBe(4); // fleet-of-3
+    expect(byBoat.delta.perRace.find((p) => p.raceId === 'r4').points).toBe(5);   // fleet-of-4
 
-    // — Missed race: delta didn't enter R3 at all —
+    // Missed race
     expect(byBoat.delta.races_sailed).toBe(4);
     expect(byBoat.delta.perRace.find((p) => p.raceId === 'r3')).toBeUndefined();
 
-    // — All boats sailed ≥ 3 races → all qualified —
+    // All qualified
     expect(byBoat.alpha.qualified).toBe(true);
     expect(byBoat.delta.qualified).toBe(true);
-
-    // — perRace dropped flags —
-    expect(byBoat.alpha.perRace.find((p) => p.raceId === 'r4').dropped).toBe(true);
-    expect(byBoat.bravo.perRace.find((p) => p.raceId === 'r5').dropped).toBe(true);
   });
 });

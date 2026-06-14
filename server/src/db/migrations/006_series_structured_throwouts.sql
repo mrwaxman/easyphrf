@@ -1,0 +1,2 @@
+ALTER TABLE series ADD COLUMN throwouts_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE series ADD COLUMN throwout_tiers JSONB NOT NULL DEFAULT '[]'

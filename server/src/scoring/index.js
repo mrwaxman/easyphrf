@@ -286,35 +286,6 @@ function calculatePursuitStarts(boats, referenceBoatId, raceStartTime, options =
 // --- 2f. Series scoring ------------------------------------------------------
 
 /**
- * Parse a throwout rule string into ordered thresholds.
- * "1 throwout after 4 races, 2 after 8 races"
- *   => [ { throwouts: 1, after: 4 }, { throwouts: 2, after: 8 } ]
- * Returns [] for empty/unparseable input.
- */
-function parseThrowoutRule(rule) {
-  if (!rule || typeof rule !== 'string') return [];
-  const re = /(\d+)\s*(?:throwouts?\s*)?after\s*(\d+)\s*races?/gi;
-  const rules = [];
-  let m;
-  while ((m = re.exec(rule)) !== null) {
-    rules.push({ throwouts: parseInt(m[1], 10), after: parseInt(m[2], 10) });
-  }
-  return rules.sort((a, b) => a.after - b.after);
-}
-
-/**
- * Number of throwouts allowed given a parsed rule set and races sailed: the
- * count from the highest threshold that has been reached.
- */
-function allowedThrowouts(rules, racesSailed) {
-  let allowed = 0;
-  for (const r of rules) {
-    if (racesSailed >= r.after) allowed = r.throwouts;
-  }
-  return allowed;
-}
-
-/**
  * Points a boat earns in one race result.
  *  - finished: its fleet place (1st = 1 point)
  *  - DNS/DNF/DSQ/RAF: fleetSize + 1
@@ -327,16 +298,23 @@ function racePoints(result) {
 /**
  * Score series standings.
  *
- * @param {object} series Series config; uses `throwout_rule`.
+ * @param {object} series Series config. Relevant fields:
+ *   throwouts_enabled {boolean} — when false, no races are discarded.
+ *   throwout_tiers {Array<{after_races:number, throwouts:number}>} — ordered
+ *     thresholds; the highest reached tier determines how many races to drop.
+ *   min_races_to_qualify {number|null} — boats below this count get rank=null.
  * @param {object[]} raceResults Races in the series, each:
  *   { raceId, raceDate, results: [ { boatId, fleetId, finishStatus,
  *     fleetPlace, fleetSize } ] }
  * @returns {object[]} standings sorted by rank:
  *   { boatId, fleetId, total_points, races_sailed, throwouts:[{raceId,points}],
- *     rank, perRace:[{raceId, raceDate, points, dropped}] }
+ *     rank, qualified, perRace:[{raceId, raceDate, points, dropped}] }
  */
 function scoreSeriesStandings(series, raceResults) {
-  const rules = parseThrowoutRule(series && series.throwout_rule);
+  const tiers =
+    series && series.throwouts_enabled && Array.isArray(series.throwout_tiers)
+      ? series.throwout_tiers
+      : [];
   const minRaces = (series && series.min_races_to_qualify) ?? 0;
 
   // Order races chronologically so "most recent" is well defined. Stable sort
@@ -369,7 +347,7 @@ function scoreSeriesStandings(series, raceResults) {
   const standings = [];
   for (const boat of boats.values()) {
     const racesSailed = boat.lines.length;
-    const dropCount = allowedThrowouts(rules, racesSailed);
+    const dropCount = tiers.reduce((n, t) => (racesSailed >= t.after_races ? t.throwouts : n), 0);
 
     // Identify which lines to drop: the worst (highest points). Ties broken by
     // dropping the later race first (arbitrary but deterministic).
@@ -454,7 +432,5 @@ module.exports = {
   calculatePursuitStarts,
   scoreSeriesStandings,
   // exported for unit testing / reuse
-  parseThrowoutRule,
-  allowedThrowouts,
   racePoints,
 };
