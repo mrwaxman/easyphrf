@@ -99,6 +99,13 @@ router.post(
     // Fleet setup is optional: guarantee a fleet exists behind the scenes so
     // entries can attach and scoring can run without any explicit setup.
     await ensureDefaultFleet(result.rows[0].race_id);
+    // Propagate the race's gun time to all fleets (shared-start default).
+    if (startTime) {
+      await db.query('UPDATE fleets SET start_time = $1 WHERE race_id = $2', [
+        startTime,
+        result.rows[0].race_id,
+      ]);
+    }
     res.status(201).json(result.rows[0]);
   })
 );
@@ -143,6 +150,14 @@ router.put(
     if (result.rows.length === 0) throw notFound('Race not found');
     // Saving (or advancing) a race must leave it with at least one fleet.
     await ensureDefaultFleet(req.params.id);
+    // When the shared gun time changes, propagate it to all fleets so each
+    // fleet's start_time reflects the single shared start.
+    if ('start_time_of_day' in req.body) {
+      await db.query('UPDATE fleets SET start_time = $1 WHERE race_id = $2', [
+        fields.start_time,
+        req.params.id,
+      ]);
+    }
     res.json(result.rows[0]);
   })
 );

@@ -569,6 +569,88 @@ describe('admin series recalculate', () => {
   });
 });
 
+describe('per-fleet start times (simultaneous)', () => {
+  test('race POST with start_time_of_day syncs the default fleet start_time', async () => {
+    const res = await request(app).post('/api/v1/admin/races').set(ADMIN)
+      .send({ name: 'SyncPost', race_date: '2026-07-01', start_type: 'simultaneous', start_time_of_day: '18:00' });
+    expect(res.status).toBe(201);
+    const detail = await request(app).get(`/api/v1/admin/races/${res.body.race_id}`).set(ADMIN);
+    expect(detail.body.fleets[0].start_time_of_day).toBe('18:00:00');
+  });
+
+  test('race PUT with start_time_of_day syncs all fleet start_times', async () => {
+    const raceRes = await request(app).post('/api/v1/admin/races').set(ADMIN)
+      .send({ name: 'SyncPut', race_date: '2026-07-01', start_type: 'simultaneous', start_time_of_day: '18:00' });
+    const raceId = raceRes.body.race_id;
+    await request(app).post(`/api/v1/admin/races/${raceId}/fleets`).set(ADMIN)
+      .send({ name: 'Fleet B', fleet_type: 'phrf' });
+
+    await request(app).put(`/api/v1/admin/races/${raceId}`).set(ADMIN)
+      .send({ start_time_of_day: '18:30', race_date: '2026-07-01' });
+
+    const detail = await request(app).get(`/api/v1/admin/races/${raceId}`).set(ADMIN);
+    for (const f of detail.body.fleets) {
+      expect(f.start_time_of_day).toBe('18:30:00');
+    }
+  });
+
+  test('fleet PUT with start_time_of_day sets only that fleet', async () => {
+    const raceRes = await request(app).post('/api/v1/admin/races').set(ADMIN)
+      .send({ name: 'SplitFleet', race_date: '2026-07-01', start_type: 'simultaneous', start_time_of_day: '18:00' });
+    const raceId = raceRes.body.race_id;
+    const fleetAId = (await request(app).get(`/api/v1/admin/races/${raceId}`).set(ADMIN)).body.fleets[0].fleet_id;
+
+    const fleetBRes = await request(app).post(`/api/v1/admin/races/${raceId}/fleets`).set(ADMIN)
+      .send({ name: 'Fleet B', fleet_type: 'phrf' });
+    const fleetBId = fleetBRes.body.fleet_id;
+
+    await request(app).put(`/api/v1/admin/races/${raceId}/fleets/${fleetBId}`).set(ADMIN)
+      .send({ start_time_of_day: '18:10' });
+
+    const detail = await request(app).get(`/api/v1/admin/races/${raceId}`).set(ADMIN);
+    const fA = detail.body.fleets.find((f) => f.fleet_id === fleetAId);
+    const fB = detail.body.fleets.find((f) => f.fleet_id === fleetBId);
+    expect(fA.start_time_of_day).toBe('18:00:00'); // unchanged
+    expect(fB.start_time_of_day).toBe('18:10:00'); // updated
+  });
+
+  test('scoring: each fleet elapsed measured from its own gun time', async () => {
+    // Fleet A gun: 18:00 PDT (2026-07-02T01:00:00Z). Fleet B gun: 18:30 PDT (+30min).
+    // Both boats finish at 19:30 PDT (2026-07-02T02:30:00Z).
+    // Fleet A elapsed = 5400s (90min). Fleet B elapsed = 3600s (60min).
+    const raceRes = await request(app).post('/api/v1/admin/races').set(ADMIN)
+      .send({ name: 'FleetElapsed', race_date: '2026-07-01', start_type: 'simultaneous', start_time_of_day: '18:00' });
+    const raceId = raceRes.body.race_id;
+    const fleetAId = (await request(app).get(`/api/v1/admin/races/${raceId}`).set(ADMIN)).body.fleets[0].fleet_id;
+
+    const fleetBRes = await request(app).post(`/api/v1/admin/races/${raceId}/fleets`).set(ADMIN)
+      .send({ name: 'Fleet B', fleet_type: 'phrf' });
+    const fleetBId = fleetBRes.body.fleet_id;
+    await request(app).put(`/api/v1/admin/races/${raceId}/fleets/${fleetBId}`).set(ADMIN)
+      .send({ start_time_of_day: '18:30' });
+
+    const boatA = await createBoat(club.club_id, { sail_number: 'FE1', phrf_base: 90 });
+    const boatB = await createBoat(club.club_id, { sail_number: 'FE2', phrf_base: 90 });
+    const eARes = await request(app).post(`/api/v1/admin/races/${raceId}/entries`).set(ADMIN)
+      .send({ fleet_id: fleetAId, boat_id: boatA.boat_id });
+    const eBRes = await request(app).post(`/api/v1/admin/races/${raceId}/entries`).set(ADMIN)
+      .send({ fleet_id: fleetBId, boat_id: boatB.boat_id });
+
+    const finishUtc = '2026-07-02T02:30:00Z'; // 19:30 PDT — both boats finish together
+    await request(app).put(`/api/v1/admin/races/${raceId}/entries/${eARes.body.entry_id}`).set(ADMIN)
+      .send({ finish_time: finishUtc, finish_status: 'finished' });
+    await request(app).put(`/api/v1/admin/races/${raceId}/entries/${eBRes.body.entry_id}`).set(ADMIN)
+      .send({ finish_time: finishUtc, finish_status: 'finished' });
+
+    const scored = await request(app).post(`/api/v1/admin/races/${raceId}/score`).set(ADMIN);
+    expect(scored.status).toBe(200);
+    const fA = scored.body.fleets.find((f) => f.fleet_id === fleetAId);
+    const fB = scored.body.fleets.find((f) => f.fleet_id === fleetBId);
+    expect(fA.entries[0].elapsed_seconds).toBe(5400); // 19:30 − 18:00 = 90 min
+    expect(fB.entries[0].elapsed_seconds).toBe(3600); // 19:30 − 18:30 = 60 min
+  });
+});
+
 describe('pursuit start sheet', () => {
   test('GET /startsheet returns ordered start times for a pursuit race', async () => {
     const race = (

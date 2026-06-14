@@ -88,7 +88,7 @@ function computeElapsedSeconds(race, entry) {
 
   switch (race.start_type) {
     case 'simultaneous': {
-      const start = toMillis(race.start_time);
+      const start = toMillis(entry.fleet_start_time ?? race.start_time);
       if (finish === null || start === null) return null;
       return Math.round((finish - start) / 1000);
     }

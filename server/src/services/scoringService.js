@@ -20,11 +20,14 @@ function racePointsFor(entry, fleetSize) {
 async function scoreAndSave(clubId, raceId) {
   const { race, fleets, entries } = await loadRace(clubId, raceId);
 
-  // Attach fleet_type so the scoring engine can branch PHRF vs one-design.
+  // Attach fleet_type and fleet_start_time so the scoring engine can branch
+  // correctly and measure each fleet's elapsed from its own gun.
   const fleetTypeById = new Map(fleets.map((f) => [f.fleet_id, f.fleet_type]));
+  const fleetStartById = new Map(fleets.map((f) => [f.fleet_id, f.start_time ?? null]));
   const enrichedEntries = entries.map((e) => ({
     ...e,
     fleet_type: fleetTypeById.get(e.fleet_id),
+    fleet_start_time: fleetStartById.get(e.fleet_id) ?? null,
   }));
   const boats = entries.map((e) => ({
     boat_id: e.boat_id,

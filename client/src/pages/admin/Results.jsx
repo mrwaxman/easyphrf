@@ -16,7 +16,9 @@ export default function Results() {
   const apiC = useApi();
   const [race, setRace] = useState(null);
   const [entries, setEntries] = useState([]);
-  const [startTime, setStartTime] = useState(''); // gun time of day (HH:mm)
+  const [startTime, setStartTime] = useState(''); // shared gun time (HH:mm)
+  const [splitStarts, setSplitStarts] = useState(false);
+  const [fleetStarts, setFleetStarts] = useState(new Map()); // fleet_id → HH:mm
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -26,9 +28,12 @@ export default function Results() {
     const [r, e] = await Promise.all([apiC.getRace(id), apiC.listEntries(id)]);
     setRace(r);
     const raceDate = String(r.race_date).slice(0, 10);
-    // Default the gun time to the scheduled start from setup, if present.
-    setStartTime(r.start_time_of_day || '12:00');
-    // Edit finish / self-start in club-local wall clock (server converts on save).
+    const shared = r.start_time_of_day || '12:00';
+    setStartTime(shared);
+    // Initialize per-fleet start times from loaded fleet data.
+    const fMap = new Map((r.fleets || []).map((f) => [f.fleet_id, f.start_time_of_day || shared]));
+    setFleetStarts(fMap);
+    setSplitStarts(false);
     setEntries(
       e.map((x) => ({
         ...x,
@@ -44,12 +49,35 @@ export default function Results() {
   }, [load]);
 
   const selfTimed = race && race.start_type === 'self_timed';
+  const isSimultaneous = race && race.start_type === 'simultaneous';
+  const multiFleet = isSimultaneous && (race.fleets?.length ?? 0) > 1;
+
+  const handleToggleSplit = (checked) => {
+    if (checked) {
+      // Seed each fleet's field from the current shared time so the admin only
+      // needs to adjust the fleet(s) that actually differ.
+      const next = new Map();
+      for (const [fid] of fleetStarts) next.set(fid, startTime);
+      setFleetStarts(next);
+    }
+    setSplitStarts(checked);
+  };
 
   const saveStart = async () => {
-    await apiC.updateRace(id, {
-      start_time_of_day: startTime || null,
-      race_date: dateOnly(race.race_date),
-    });
+    if (splitStarts && multiFleet) {
+      await Promise.all(
+        (race.fleets || []).map((f) =>
+          apiC.updateFleet(id, f.fleet_id, {
+            start_time_of_day: fleetStarts.get(f.fleet_id) || null,
+          })
+        )
+      );
+    } else {
+      await apiC.updateRace(id, {
+        start_time_of_day: startTime || null,
+        race_date: dateOnly(race.race_date),
+      });
+    }
   };
 
   const updateEntry = (eid, patch) => {
@@ -67,8 +95,9 @@ export default function Results() {
       if (!e.finish_time || e.finish_status !== 'finished') continue;
       const finish = new Date(e.finish_time);
       let start = null;
-      if (race.start_type === 'simultaneous') {
-        start = buildGunDateTime(race.race_date, startTime);
+      if (isSimultaneous) {
+        const fleetTime = splitStarts && multiFleet ? fleetStarts.get(e.fleet_id) : startTime;
+        start = buildGunDateTime(race.race_date, fleetTime || startTime);
       } else if (race.start_type === 'self_timed') {
         start = e.self_start_time ? new Date(e.self_start_time) : null;
       }
@@ -108,7 +137,7 @@ export default function Results() {
     if (errors.size > 0) return;
     setBusy(true);
     try {
-      if (race.start_type === 'simultaneous') await saveStart();
+      if (isSimultaneous) await saveStart();
       await Promise.all(entries.map(persistEntry));
       const detail = await apiC.scoreRace(id);
       setPreview(detail);
@@ -148,30 +177,76 @@ export default function Results() {
       <p className="mb-4 text-sm text-slate-500">Status: {race.status}</p>
       {error && <p className="mb-3 rounded bg-amber-50 p-2 text-sm text-amber-700">{error}</p>}
 
-      {race.start_type === 'simultaneous' && (
+      {isSimultaneous && (
         <div className="mb-4 rounded border bg-white p-4">
-          <div className="flex items-end gap-2">
-            <label className="text-sm">
-              <span className="text-slate-500">Actual start (gun) time</span>
-              <input
-                type="time"
-                step="1"
-                className="mt-1 block rounded border px-2 py-1"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-              />
-            </label>
-            <button
-              onClick={saveStartOnly}
-              disabled={busy}
-              className="rounded border px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
-            >
-              {busy ? 'Saving…' : 'Save start time'}
-            </button>
-          </div>
+          {/* Multi-fleet toggle — only shown when there are 2+ fleets */}
+          {multiFleet && (
+            <div className="mb-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={splitStarts}
+                  onChange={(e) => handleToggleSplit(e.target.checked)}
+                />
+                Fleets start at different times
+              </label>
+            </div>
+          )}
+
+          {splitStarts && multiFleet ? (
+            /* Per-fleet start time inputs */
+            <div className="space-y-2">
+              {(race.fleets || []).map((f) => (
+                <label key={f.fleet_id} className="flex items-center gap-3 text-sm">
+                  <span className="w-32 font-medium">{f.name}</span>
+                  <input
+                    type="time"
+                    step="1"
+                    className="rounded border px-2 py-1"
+                    value={fleetStarts.get(f.fleet_id) || ''}
+                    onChange={(ev) => {
+                      const next = new Map(fleetStarts);
+                      next.set(f.fleet_id, ev.target.value);
+                      setFleetStarts(next);
+                    }}
+                  />
+                </label>
+              ))}
+              <button
+                onClick={saveStartOnly}
+                disabled={busy}
+                className="mt-1 rounded border px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                {busy ? 'Saving…' : 'Save start times'}
+              </button>
+            </div>
+          ) : (
+            /* Single shared start time input */
+            <div className="flex items-end gap-2">
+              <label className="text-sm">
+                <span className="text-slate-500">Actual start (gun) time</span>
+                <input
+                  type="time"
+                  step="1"
+                  className="mt-1 block rounded border px-2 py-1"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </label>
+              <button
+                onClick={saveStartOnly}
+                disabled={busy}
+                className="rounded border px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                {busy ? 'Saving…' : 'Save start time'}
+              </button>
+            </div>
+          )}
+
           <p className="mt-2 text-xs text-slate-400">
-            Elapsed time is measured from this gun time (club local). Defaults to the scheduled
-            start from setup — edit it here if the actual start differed.
+            {splitStarts && multiFleet
+              ? "Each fleet's elapsed time is measured from its own gun. Entered in the club's local time."
+              : 'Elapsed time is measured from this gun time (club local). Defaults to the scheduled start from setup — edit it here if the actual start differed.'}
           </p>
         </div>
       )}

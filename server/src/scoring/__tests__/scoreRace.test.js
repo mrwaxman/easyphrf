@@ -185,6 +185,93 @@ describe('scoreRace — simultaneous start', () => {
   });
 });
 
+describe('scoreRace — per-fleet start times (simultaneous)', () => {
+  const FLEET_B_START = new Date(START.getTime() + 10 * 60 * 1000); // 10 min after race gun
+
+  test('REGRESSION: single-fleet simultaneous — Race-2 corrected times are stable', () => {
+    const elapsed = 5312; // 1:28:32
+    const { byId } = runRace([
+      ['bratmobile', { phrf: 170, elapsed }],
+      ['jaybird',    { phrf: 129, elapsed }],
+      ['scooter',    { phrf:  72, elapsed }],
+    ]);
+    // Higher PHRF = bigger handicap = lower corrected time = better place.
+    expect(byId.bratmobile.corrected_seconds).toBe(Math.round(elapsed * 650 / (650 + 170))); // 4211
+    expect(byId.jaybird.corrected_seconds).toBe(Math.round(elapsed * 650 / (650 + 129)));     // 4431
+    expect(byId.scooter.corrected_seconds).toBe(Math.round(elapsed * 650 / (650 + 72)));      // 4782
+    expect(byId.bratmobile.fleet_place).toBe(1);
+    expect(byId.jaybird.fleet_place).toBe(2);
+    expect(byId.scooter.fleet_place).toBe(3);
+  });
+
+  test('shared fleet_start_time = race start produces identical results to no fleet_start_time', () => {
+    const race = { start_type: 'simultaneous', start_time: START };
+    const specs = [
+      ['a', { fleet: 'F1', phrf: 90, elapsed: 3600 }],
+      ['b', { fleet: 'F2', phrf: 150, elapsed: 3700 }],
+    ];
+    const { byId: noFleet } = runRace(specs, race);
+
+    const built = specs.map(([id, opts]) => makeEntry(id, opts));
+    const withFleetEntries = built.map((b) => ({ ...b.entry, fleet_start_time: START }));
+    const withFleet = Object.fromEntries(
+      scoreRace(race, withFleetEntries, built.map((b) => b.boat)).map((e) => [e.entry_id, e])
+    );
+
+    expect(withFleet.a.corrected_seconds).toBe(noFleet.a.corrected_seconds);
+    expect(withFleet.b.corrected_seconds).toBe(noFleet.b.corrected_seconds);
+    expect(withFleet.a.elapsed_seconds).toBe(noFleet.a.elapsed_seconds);
+    expect(withFleet.b.elapsed_seconds).toBe(noFleet.b.elapsed_seconds);
+  });
+
+  test('separate fleet starts: elapsed uses each fleet gun, not race start', () => {
+    // Fleet A: gun = START; Fleet B: gun = START+10min. Both finish at START+65min.
+    // Fleet A elapsed = 65min = 3900s. Fleet B elapsed = 55min = 3300s.
+    // Using race.start_time for Fleet B would give 3900s (wrong).
+    const finishTime = new Date(START.getTime() + 3900 * 1000);
+    const race = { start_type: 'simultaneous', start_time: START };
+    const entries = [
+      {
+        entry_id: 'a', boat_id: 'boat-a', fleet_id: 'FA', fleet_type: 'phrf',
+        finish_status: 'finished', finish_time: finishTime,
+        fleet_start_time: START, phrf_override: null, no_spinnaker: false,
+      },
+      {
+        entry_id: 'b', boat_id: 'boat-b', fleet_id: 'FB', fleet_type: 'phrf',
+        finish_status: 'finished', finish_time: finishTime,
+        fleet_start_time: FLEET_B_START, phrf_override: null, no_spinnaker: false,
+      },
+    ];
+    const boats = [
+      { boat_id: 'boat-a', phrf_base: 90, phrf_spinnaker: 105, rating_source: 'official' },
+      { boat_id: 'boat-b', phrf_base: 90, phrf_spinnaker: 105, rating_source: 'official' },
+    ];
+    const scored = scoreRace(race, entries, boats);
+    const a = scored.find((e) => e.entry_id === 'a');
+    const b = scored.find((e) => e.entry_id === 'b');
+
+    expect(a.elapsed_seconds).toBe(3900);  // finish − START
+    expect(b.elapsed_seconds).toBe(3300);  // finish − FLEET_B_START (NOT 3900)
+    expect(b.corrected_seconds).toBeLessThan(a.corrected_seconds); // shorter elapsed → lower corrected
+  });
+
+  test('pursuit: fleet_start_time is ignored; per-boat entry.start_time is used', () => {
+    const race = { start_type: 'pursuit' };
+    const boatStart = new Date('2026-06-01T18:10:00Z');
+    const entry = {
+      entry_id: 'A', boat_id: 'boat-A', fleet_id: 'F', fleet_type: 'phrf',
+      finish_status: 'finished',
+      start_time: boatStart,
+      finish_time: new Date(boatStart.getTime() + 5000 * 1000),
+      fleet_start_time: new Date('2026-06-01T17:00:00Z'), // decoy — must be ignored
+      no_spinnaker: false, phrf_override: null,
+    };
+    const boat = { boat_id: 'boat-A', phrf_base: 105, phrf_spinnaker: 120, rating_source: 'official' };
+    const [scored] = scoreRace(race, [entry], [boat]);
+    expect(scored.elapsed_seconds).toBe(5000); // entry.start_time, not fleet_start_time
+  });
+});
+
 describe('scoreRace — other start types', () => {
   test('self_timed/fully_independent uses self_start_time -> finish_time', () => {
     const selfStart = new Date('2026-06-01T19:00:00Z');

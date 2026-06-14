@@ -75,7 +75,9 @@ function assembleRaceDetail({ race, fleets, entries }, { timeZone = null } = {})
     const fleetEntries = decorated
       .filter((e) => e.fleet_id === fleet.fleet_id)
       .sort((a, b) => byPlace(a.fleet_place, b.fleet_place));
-    return { ...fleet, entries: fleetEntries };
+    const fleetStartParts =
+      timeZone && fleet.start_time ? utcToZonedParts(fleet.start_time, timeZone) : { time: null };
+    return { ...fleet, entries: fleetEntries, start_time_of_day: fleetStartParts.time };
   });
 
   const phrfFleetCount = fleets.filter((f) => f.fleet_type === 'phrf').length;
