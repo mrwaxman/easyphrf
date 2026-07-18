@@ -164,7 +164,16 @@ export default function Entries() {
                 <td className="px-2 py-1">{e.sail_number}</td>
                 <td className="px-2 py-1 font-medium">{e.boat_name}</td>
                 {!singleFleet && <td className="px-2 py-1">{fleet ? fleet.name : '—'}</td>}
-                <td className="px-2 py-1">{e.no_spinnaker ? '✓' : ''}</td>
+                <td className="px-2 py-1">
+                  <input
+                    type="checkbox"
+                    checked={!!e.no_spinnaker}
+                    onChange={async (ev) => {
+                      await apiC.updateEntry(id, e.entry_id, { no_spinnaker: ev.target.checked });
+                      load();
+                    }}
+                  />
+                </td>
                 <td className="px-2 py-1">{e.phrf_override ?? ''}</td>
                 <td className="px-2 py-1 text-right">
                   <button onClick={() => remove(e.entry_id)} className="text-red-600 hover:underline">Remove</button>
