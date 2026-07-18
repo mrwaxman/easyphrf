@@ -43,7 +43,14 @@ export default function RacesList() {
               {races.map((r) => (
                 <tr key={r.race_id} className="border-b">
                   <td className="px-2 py-1">{String(r.race_date).slice(0, 10)}</td>
-                  <td className="px-2 py-1 font-medium">{r.name}</td>
+                  <td className="px-2 py-1 font-medium">
+                    <Link
+                      to={['published', 'revised'].includes(r.status) ? `/admin/races/${r.race_id}/results` : `/admin/races/${r.race_id}/edit`}
+                      className="text-brand-700 hover:underline"
+                    >
+                      {r.name}
+                    </Link>
+                  </td>
                   <td className="px-2 py-1">{r.start_type}</td>
                   <td className="px-2 py-1"><RaceStatusBadge status={r.status} /></td>
                   <td className="px-2 py-1 space-x-2">

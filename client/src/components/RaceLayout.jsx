@@ -1,4 +1,4 @@
-import { useParams, NavLink, Outlet } from 'react-router-dom';
+import { useParams, NavLink, Outlet, Link } from 'react-router-dom';
 import { useApi } from '../hooks/useApi.js';
 import { useAsync } from '../hooks/useAsync.js';
 import { AdminLayout } from './AdminLayout.jsx';
@@ -51,7 +51,8 @@ export function RaceLayout() {
   return (
     <AdminLayout>
       <div className="mb-4">
-        <div className="text-sm font-medium text-slate-600">{headerText}</div>
+        <Link to="/admin/races" className="text-sm text-brand-600 hover:underline">← All races</Link>
+        <div className="mt-1 text-sm font-medium text-slate-600">{headerText}</div>
         <nav className="mt-2 flex flex-wrap gap-1 overflow-x-auto border-b">
           {tabs
             .filter((t) => t.show)

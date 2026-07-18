@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useApi } from '../../hooks/useApi.js';
 import { useAsync } from '../../hooks/useAsync.js';
 import { AdminLayout } from '../../components/AdminLayout.jsx';
@@ -275,6 +276,14 @@ export default function Series() {
                 <span>
                   <strong>{s.name}</strong>{' '}
                   <span className="text-slate-400">· {s.season_year}</span>
+                  <Link
+                    to={`/series/${s.series_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-2 text-xs text-brand-600 hover:underline"
+                  >
+                    View standings ↗
+                  </Link>
                   {s.throwouts_enabled && s.throwout_tiers?.length > 0 && (
                     <span className="ml-2 text-xs text-slate-500">
                       (

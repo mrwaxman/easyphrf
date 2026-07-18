@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useApi } from '../../hooks/useApi.js';
 import { RaceResultsView } from '../../components/RaceResultsView.jsx';
 import { FINISH_STATUSES, FINISH_STATUS_LABELS } from '@easyphrf/shared';
@@ -287,7 +287,7 @@ export default function Results() {
         </tbody>
       </table>
 
-      <div className="mb-6 flex gap-2">
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         <button onClick={calculate} disabled={busy} className="rounded bg-brand-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">
           {busy ? 'Working…' : 'Calculate Results'}
         </button>
@@ -296,6 +296,11 @@ export default function Results() {
         )}
         {['published', 'revised'].includes(race.status) && (
           <button onClick={revise} className="rounded bg-amber-600 px-3 py-1.5 text-sm text-white">Revise Results</button>
+        )}
+        {['published', 'revised'].includes(race.status) && (
+          <Link to={`/races/${id}`} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-600 hover:underline">
+            View public results ↗
+          </Link>
         )}
       </div>
 

@@ -53,7 +53,7 @@ export default function Dashboard() {
             {activeSeriesList.map((s) => (
               <Link
                 key={s.series_id}
-                to={`/series/${s.series_id}`}
+                to="/admin/series"
                 className="block truncate text-xs text-brand-700 hover:underline focus:underline focus:outline-none"
               >
                 {s.name}
