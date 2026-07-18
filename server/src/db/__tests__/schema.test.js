@@ -8,12 +8,12 @@ describe('database schema (pg-mem)', () => {
     await db.close();
   });
 
-  test('migrations create all tables and seed the demo club', async () => {
+  test('migrations create all tables and seed the club', async () => {
     const { club } = await createTestDb();
 
     expect(club).toBeDefined();
-    expect(club.slug).toBe('demo');
-    expect(club.name).toBe('Demo Sailing Club');
+    expect(club.slug).toBe('buccaneer');
+    expect(club.name).toBe('Buccaneer Yacht Club');
     expect(club.timezone).toBe('America/Los_Angeles');
     // Defaults applied by the schema.
     expect(club.scoring_method).toBe('time_on_time');

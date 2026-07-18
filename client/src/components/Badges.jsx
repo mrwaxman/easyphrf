@@ -9,12 +9,12 @@ export function InferredBadge() {
   );
 }
 
-/** Blue dagger marking a per-race PHRF override; tooltip shows the note. */
+/** Navy dagger marking a per-race PHRF override; tooltip shows the note. */
 export function OverrideBadge({ note }) {
   return (
     <span
       title={note ? `Override: ${note}` : 'PHRF override applied'}
-      className="ml-1 font-bold text-blue-600"
+      className="ml-1 font-bold text-brand-600"
       aria-label="PHRF override"
     >
       †

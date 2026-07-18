@@ -19,15 +19,18 @@ afterEach(async () => {
 
 describe('public endpoints', () => {
   test('GET /clubs/:slug returns club info', async () => {
-    const res = await request(app).get('/api/v1/clubs/demo');
+    const res = await request(app).get('/api/v1/clubs/buccaneer');
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ slug: 'demo', name: 'Demo Sailing Club' });
+    expect(res.body).toMatchObject({ slug: 'buccaneer', name: 'Buccaneer Yacht Club' });
   });
 
-  test('GET /clubs/:slug returns 404 for unknown slug', async () => {
-    const res = await request(app).get('/api/v1/clubs/nope');
-    expect(res.status).toBe(404);
-  });
+  // PHASE 2 MULTI-TENANT (restore later): in single-tenant mode the slug is
+  // ignored and every request resolves the one configured club, so an "unknown
+  // slug" no longer 404s. Re-enable when multi-club resolution returns.
+  // test('GET /clubs/:slug returns 404 for unknown slug', async () => {
+  //   const res = await request(app).get('/api/v1/clubs/nope');
+  //   expect(res.status).toBe(404);
+  // });
 
   test('GET /clubs/:slug/races returns only published races', async () => {
     await createScoredRace(club.club_id, { publish: true, name: 'Published Race', sailPrefix: 'P' });
@@ -79,10 +82,12 @@ describe('admin auth', () => {
     expect(res.status).toBe(401);
   });
 
-  test('missing club context returns 400', async () => {
-    const res = await request(app).get('/api/v1/admin/boats').set('X-Test-Auth', 'admin-user');
-    expect(res.status).toBe(400);
-  });
+  // PHASE 2 MULTI-TENANT (restore later): single-tenant mode always resolves the
+  // one configured club, so a request without club context no longer 400s.
+  // test('missing club context returns 400', async () => {
+  //   const res = await request(app).get('/api/v1/admin/boats').set('X-Test-Auth', 'admin-user');
+  //   expect(res.status).toBe(400);
+  // });
 });
 
 describe('admin boats', () => {

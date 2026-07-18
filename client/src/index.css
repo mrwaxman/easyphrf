@@ -3,7 +3,20 @@
 @tailwind utilities;
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-white text-slate-900 antialiased;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+/* Navy + white, minimal: headings and inline links pick up the brand navy.
+   Element selectors sit below Tailwind utility classes, so components that set
+   their own color (e.g. the white header links) still win. */
+@layer base {
+  h1,
+  h2,
+  h3 {
+    @apply text-brand-700;
+  }
 }
 
 /* Print-friendly start sheet / results: hide chrome when printing. */

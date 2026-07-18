@@ -11,6 +11,10 @@ const { renderSeriesStandingsPdf } = require('../pdf/seriesStandingsPdf');
 
 const router = express.Router();
 
+// NOTE (single-tenant): the `:slug` path segment below is currently ignored by
+// resolveClub, which always resolves the one configured club. The routes keep
+// the segment so URLs stay stable and multi-tenant support can be restored.
+
 /** Public-safe view of a club. */
 function publicClub(club) {
   return {

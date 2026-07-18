@@ -1,7 +1,10 @@
 // Thin fetch wrapper for the EasyPHRF API. Public calls need only the club
 // slug; admin calls also pass a Clerk session token (see useApi()).
 
-const CLUB_SLUG = import.meta.env.VITE_CLUB_SLUG || 'demo';
+// Single-tenant: the server resolves one fixed club and ignores this value, but
+// it is still sent so the API paths stay valid and Phase-2 multi-tenant restore
+// is trivial. Defaults to the Buccaneer Yacht Club slug.
+const CLUB_SLUG = import.meta.env.VITE_CLUB_SLUG || 'buccaneer';
 const BASE = '/api/v1';
 
 export class ApiError extends Error {
