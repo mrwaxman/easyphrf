@@ -688,4 +688,31 @@ describe('pursuit start sheet', () => {
     expect(res.body.starts[0].intervalSeconds).toBe(0);
     expect(res.body.starts[1].intervalSeconds).toBeGreaterThan(0);
   });
+
+  test('race_distance is used as the TOD factor: delay = PHRF_diff × distance', async () => {
+    const race = (
+      await db.query(
+        `INSERT INTO races (club_id, name, race_date, start_type, status, start_time, race_distance)
+         VALUES ($1, 'Pursuit TOD', '2026-06-01', 'pursuit', 'draft', $2, 6.4) RETURNING *`,
+        [club.club_id, new Date('2026-06-01T18:00:00Z')]
+      )
+    ).rows[0];
+    const fleet = (
+      await db.query(
+        `INSERT INTO fleets (race_id, name, fleet_type) VALUES ($1, 'P', 'phrf') RETURNING *`,
+        [race.race_id]
+      )
+    ).rows[0];
+    for (const [sail, phrf] of [['USA 20', 82], ['USA 21', 226]]) {
+      const boat = await createBoat(club.club_id, { sail_number: sail, phrf_base: phrf });
+      await db.query(`INSERT INTO race_entries (race_id, fleet_id, boat_id) VALUES ($1,$2,$3)`, [
+        race.race_id, fleet.fleet_id, boat.boat_id,
+      ]);
+    }
+    const res = await request(app).get(`/api/v1/admin/races/${race.race_id}/startsheet`).set(ADMIN);
+    expect(res.status).toBe(200);
+    // delay = (226 - 82) × 6.4 = 144 × 6.4 = 921.6 → rounded to 922 s
+    const fast = res.body.starts.find((s) => s.phrf === 82);
+    expect(fast.intervalSeconds).toBe(922);
+  });
 });

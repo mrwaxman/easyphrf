@@ -271,8 +271,13 @@ router.get(
 
     const opts = {};
     if (req.query.factor) {
+      // Explicit override wins.
       opts.factor = Number(req.query.factor);
+    } else if (race.race_distance != null) {
+      // Time-on-distance: delay (s) = PHRF_diff × distance (nm), so factor = distance.
+      opts.factor = Number(race.race_distance);
     } else if (race.expected_duration_minutes != null) {
+      // Fallback: derive factor from expected duration via time-on-time formula.
       opts.raceSeconds = race.expected_duration_minutes * 60;
     }
     const starts = calculatePursuitStarts(boats, referenceBoatId, race.start_time, opts);
