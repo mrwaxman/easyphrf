@@ -10,7 +10,8 @@ export default function Dashboard() {
   const races = useAsync(() => apiC.listRaces(), []);
   const series = useAsync(() => apiC.listSeries(), []);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const activeBoats = (boats.data || []).filter((b) => b.active).length;
   const upcomingRaces = (races.data || []).filter(
     (r) => String(r.race_date).slice(0, 10) >= today && ['draft', 'open'].includes(r.status)
@@ -31,21 +32,20 @@ export default function Dashboard() {
           <p className="text-3xl font-bold text-brand-700">{activeBoats}</p>
           <p className="text-sm text-slate-500">Active boats</p>
         </Link>
-        <div className="rounded border bg-white p-4">
+        <Link
+          to="/admin/races"
+          className="block rounded border bg-white p-4 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        >
           <p className="text-3xl font-bold text-brand-700">{upcomingRaces.length}</p>
           <p className="text-sm text-slate-500">Upcoming races</p>
           <ul className="mt-2 space-y-1">
             {upcomingRaces.map((r) => (
-              <Link
-                key={r.race_id}
-                to={`/admin/races/${r.race_id}/entries`}
-                className="block truncate text-xs text-brand-700 hover:underline focus:underline focus:outline-none"
-              >
+              <span key={r.race_id} className="block truncate text-xs text-brand-700">
                 {r.name}
-              </Link>
+              </span>
             ))}
           </ul>
-        </div>
+        </Link>
         <div className="rounded border bg-white p-4">
           <p className="text-3xl font-bold text-brand-700">{activeSeriesList.length}</p>
           <p className="text-sm text-slate-500">Active series</p>
