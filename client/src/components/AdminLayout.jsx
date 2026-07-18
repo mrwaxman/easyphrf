@@ -38,13 +38,23 @@ export function AdminLayout({ children }) {
               ))}
             </nav>
           </div>
-          <button
-            type="button"
-            onClick={signOut}
-            className="text-sm text-brand-100 hover:text-white"
-          >
-            Sign out
-          </button>
+          <div className="flex items-center gap-4 text-sm">
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand-100 hover:text-white"
+            >
+              View public site ↗
+            </a>
+            <button
+              type="button"
+              onClick={signOut}
+              className="text-brand-100 hover:text-white"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
