@@ -715,4 +715,59 @@ describe('pursuit start sheet', () => {
     const fast = res.body.starts.find((s) => s.phrf === 82);
     expect(fast.intervalSeconds).toBe(922);
   });
+
+  test('toggling no_spinnaker on an entry changes the PHRF and start time on the next startsheet fetch', async () => {
+    const race = (
+      await db.query(
+        `INSERT INTO races (club_id, name, race_date, start_type, status, start_time, race_distance)
+         VALUES ($1, 'NS Toggle', '2026-06-01', 'pursuit', 'draft', $2, 10) RETURNING *`,
+        [club.club_id, new Date('2026-06-01T18:00:00Z')]
+      )
+    ).rows[0];
+    const fleet = (
+      await db.query(
+        `INSERT INTO fleets (race_id, name, fleet_type) VALUES ($1, 'F', 'phrf') RETURNING *`,
+        [race.race_id]
+      )
+    ).rows[0];
+    // Jaybird: base 100, NS offset 30 → phrf_spinnaker = 130
+    const jaybird = await createBoat(club.club_id, {
+      sail_number: 'J1',
+      boat_name: 'Jaybird',
+      phrf_base: 100,
+      spinnaker_offset: 30,
+    });
+    // Reference boat (slowest, always interval = 0)
+    const ref = await createBoat(club.club_id, { sail_number: 'R1', boat_name: 'Ref', phrf_base: 200 });
+
+    // Insert both entries with no_spinnaker = false (default)
+    const jayEntry = (await db.query(
+      `INSERT INTO race_entries (race_id, fleet_id, boat_id, no_spinnaker)
+       VALUES ($1, $2, $3, false) RETURNING *`,
+      [race.race_id, fleet.fleet_id, jaybird.boat_id]
+    )).rows[0];
+    await db.query(`INSERT INTO race_entries (race_id, fleet_id, boat_id) VALUES ($1,$2,$3)`, [
+      race.race_id, fleet.fleet_id, ref.boat_id,
+    ]);
+
+    // Before toggle: Jaybird uses phrf_base=100, delay = (200-100)×10 = 1000s
+    const before = await request(app).get(`/api/v1/admin/races/${race.race_id}/startsheet`).set(ADMIN);
+    expect(before.status).toBe(200);
+    const beforeJay = before.body.starts.find((s) => s.sail_number === 'J1');
+    expect(beforeJay.phrf).toBe(100);
+    expect(beforeJay.intervalSeconds).toBe(1000);
+
+    // Toggle no_spinnaker via the PUT entries API
+    await request(app)
+      .put(`/api/v1/admin/races/${race.race_id}/entries/${jayEntry.entry_id}`)
+      .set(ADMIN)
+      .send({ no_spinnaker: true });
+
+    // After toggle: Jaybird uses phrf_spinnaker=130, delay = (200-130)×10 = 700s
+    const after = await request(app).get(`/api/v1/admin/races/${race.race_id}/startsheet`).set(ADMIN);
+    expect(after.status).toBe(200);
+    const afterJay = after.body.starts.find((s) => s.sail_number === 'J1');
+    expect(afterJay.phrf).toBe(130);
+    expect(afterJay.intervalSeconds).toBe(700);
+  });
 });

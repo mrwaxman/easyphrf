@@ -78,9 +78,14 @@ export default function StartSheet() {
     <>
       <div className="mb-4 flex items-center justify-between no-print">
         <h1 className="text-2xl font-bold">Pursuit Start Sheet</h1>
-        <button onClick={() => window.print()} className="rounded border px-3 py-1.5 text-sm hover:bg-slate-50">
-          Print / Download
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => state.reload()} className="rounded border px-3 py-1.5 text-sm hover:bg-slate-50">
+            Refresh
+          </button>
+          <button onClick={() => window.print()} className="rounded border px-3 py-1.5 text-sm hover:bg-slate-50">
+            Print / Download
+          </button>
+        </div>
       </div>
       <AsyncBoundary state={state}>
         {(data) =>
