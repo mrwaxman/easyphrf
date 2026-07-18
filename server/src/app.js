@@ -10,13 +10,13 @@ const { errorHandler } = require('./middleware/errorHandler');
 
 /**
  * Build the Express app. Exported as a factory so tests can construct an
- * instance without starting a listener and without loading Clerk.
+ * instance without starting a listener.
  *
- * @param {object} [opts]
- * @param {boolean} [opts.enableClerk] Mount Clerk middleware (default: true
- *   outside of tests). Tests leave it off and use the auth test hook.
+ * (Auth is a shared-credential Basic-auth hack; Clerk is bypassed — see
+ * middleware/auth.js. The unused opts arg is kept for call-site compatibility.)
  */
-function createApp({ enableClerk = process.env.NODE_ENV !== 'test' } = {}) {
+// eslint-disable-next-line no-unused-vars
+function createApp(_opts = {}) {
   const app = express();
 
   app.use(
@@ -33,14 +33,8 @@ function createApp({ enableClerk = process.env.NODE_ENV !== 'test' } = {}) {
   // results stay available regardless of Clerk configuration/availability.
   app.use('/api/v1', publicRouter);
 
-  // Admin surface: Clerk session context (scoped here only) then auth gate.
-  const adminMiddleware = [];
-  if (enableClerk) {
-    // eslint-disable-next-line global-require
-    const { clerkMiddleware } = require('@clerk/express');
-    adminMiddleware.push(clerkMiddleware());
-  }
-  app.use('/api/v1/admin', ...adminMiddleware, requireAuth, adminRouter);
+  // Admin surface: shared-credential Basic auth (Clerk bypassed).
+  app.use('/api/v1/admin', requireAuth, adminRouter);
 
   // In production the server also serves the built React client. This is a
   // single-process deploy; in dev the client runs as its own Vite process, so

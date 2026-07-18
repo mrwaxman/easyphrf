@@ -1,9 +1,10 @@
-import { Routes, Route } from 'react-router-dom';
-import { SignedIn, SignedOut, RedirectToSignIn, SignIn } from '@clerk/clerk-react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 
 import Home from './pages/public/Home.jsx';
 import RaceResults from './pages/public/RaceResults.jsx';
 import SeriesStandings from './pages/public/SeriesStandings.jsx';
+import Login from './pages/admin/Login.jsx';
+import { isAuthed } from './auth.js';
 
 import Dashboard from './pages/admin/Dashboard.jsx';
 import Boats from './pages/admin/Boats.jsx';
@@ -15,16 +16,9 @@ import StartSheet from './pages/admin/StartSheet.jsx';
 import Series from './pages/admin/Series.jsx';
 import { RaceLayout } from './components/RaceLayout.jsx';
 
-/** Gate admin routes behind a Clerk session. */
+/** Gate admin routes behind the shared credential (Clerk bypassed). */
 function RequireAdmin({ children }) {
-  return (
-    <>
-      <SignedIn>{children}</SignedIn>
-      <SignedOut>
-        <RedirectToSignIn />
-      </SignedOut>
-    </>
-  );
+  return isAuthed() ? children : <Navigate to="/sign-in" replace />;
 }
 
 export default function App() {
@@ -35,15 +29,8 @@ export default function App() {
       <Route path="/races/:id" element={<RaceResults />} />
       <Route path="/series/:id" element={<SeriesStandings />} />
 
-      {/* Clerk-hosted sign in */}
-      <Route
-        path="/sign-in/*"
-        element={
-          <div className="flex min-h-screen items-center justify-center">
-            <SignIn routing="path" path="/sign-in" />
-          </div>
-        }
-      />
+      {/* Shared-credential sign in (Clerk bypassed) */}
+      <Route path="/sign-in" element={<Login />} />
 
       {/* Admin (auth required) */}
       <Route path="/admin" element={<RequireAdmin><Dashboard /></RequireAdmin>} />

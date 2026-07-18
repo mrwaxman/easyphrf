@@ -1,5 +1,8 @@
 // Thin fetch wrapper for the EasyPHRF API. Public calls need only the club
-// slug; admin calls also pass a Clerk session token (see useApi()).
+// slug; admin calls also pass a shared credential as HTTP Basic auth (see
+// useApi() and auth.js — Clerk is bypassed).
+
+import { clearCredential } from '../auth.js';
 
 // Single-tenant: the server resolves one fixed club and ignores this value, but
 // it is still sent so the API paths stay valid and Phase-2 multi-tenant restore
@@ -17,7 +20,7 @@ export class ApiError extends Error {
 
 async function request(path, { method = 'GET', body, token, isForm = false } = {}) {
   const headers = { 'X-Club-Slug': CLUB_SLUG };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers.Authorization = `Basic ${token}`;
 
   let payload;
   if (isForm) {
@@ -31,6 +34,11 @@ async function request(path, { method = 'GET', body, token, isForm = false } = {
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
+    // A stale/invalid credential on an authed call: drop it and bounce to login.
+    if (res.status === 401 && token) {
+      clearCredential();
+      if (typeof window !== 'undefined') window.location.assign('/sign-in');
+    }
     throw new ApiError(res.status, (data && data.error) || res.statusText, data);
   }
   return data;
@@ -51,6 +59,9 @@ export const api = {
 export function adminApi(getToken) {
   const auth = async (path, opts = {}) => request(path, { ...opts, token: await getToken() });
   return {
+    // Verify the current credential (used by the login form).
+    session: () => auth('/admin/session'),
+
     listBoats: () => auth('/admin/boats'),
     createBoat: (body) => auth('/admin/boats', { method: 'POST', body }),
     updateBoat: (id, body) => auth(`/admin/boats/${id}`, { method: 'PUT', body }),

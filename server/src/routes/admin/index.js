@@ -11,6 +11,10 @@ const router = express.Router();
 // Every admin route operates within a club context (header or query param).
 router.use(resolveClub);
 
+// Lightweight credential check for the login form: reaching here means auth
+// passed, so just echo the current admin identity.
+router.get('/session', (req, res) => res.json({ ok: true, user: req.auth.userId }));
+
 router.use('/boats', boatsRouter);
 router.use('/races', racesRouter);
 router.use('/series', seriesRouter);

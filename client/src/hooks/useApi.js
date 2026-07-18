@@ -1,9 +1,8 @@
 import { useMemo } from 'react';
-import { useAuth } from '@clerk/clerk-react';
 import { adminApi } from '../api/client.js';
+import { getCredential } from '../auth.js';
 
-/** Admin API bound to the current Clerk session token. */
+/** Admin API bound to the stored shared credential (Clerk bypassed). */
 export function useApi() {
-  const { getToken } = useAuth();
-  return useMemo(() => adminApi(() => getToken()), [getToken]);
+  return useMemo(() => adminApi(() => getCredential()), []);
 }
