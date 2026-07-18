@@ -220,7 +220,7 @@ export default function Boats() {
                     >
                       Edit
                     </button>
-                    {b.active && (
+                    {b.active ? (
                       <button
                         className="text-red-600 hover:underline"
                         onClick={async () => {
@@ -229,6 +229,16 @@ export default function Boats() {
                         }}
                       >
                         Deactivate
+                      </button>
+                    ) : (
+                      <button
+                        className="text-brand-600 hover:underline"
+                        onClick={async () => {
+                          await apiC.updateBoat(b.boat_id, { active: true });
+                          state.reload();
+                        }}
+                      >
+                        Reactivate
                       </button>
                     )}
                   </td>
