@@ -10,12 +10,8 @@ export default function Dashboard() {
   const races = useAsync(() => apiC.listRaces(), []);
   const series = useAsync(() => apiC.listSeries(), []);
 
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const activeBoats = (boats.data || []).filter((b) => b.active).length;
-  const upcomingRaces = (races.data || []).filter(
-    (r) => String(r.race_date).slice(0, 10) >= today && ['draft', 'open'].includes(r.status)
-  );
+  const upcomingRaces = (races.data || []).filter((r) => ['draft', 'open'].includes(r.status));
   const activeSeriesList = (series.data || []).filter((s) => s.active);
   const recent = (races.data || [])
     .filter((r) => ['published', 'revised'].includes(r.status))
