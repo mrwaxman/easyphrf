@@ -104,6 +104,18 @@ export default function Series() {
     setStandings(data);
   };
 
+  const deleteSeries = async (series) => {
+    if (!window.confirm(`Delete "${series.name}"? Its races will be unlinked but not deleted.`)) return;
+    try {
+      await apiC.deleteSeries(series.series_id);
+      if (editing?.series_id === series.series_id) cancelEditing();
+      if (standings?.series?.series_id === series.series_id) setStandings(null);
+      state.reload();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const fleetSections = standings
     ? standings.fleetStandings && standings.fleetStandings.length > 0
       ? standings.fleetStandings
@@ -285,6 +297,12 @@ export default function Series() {
                     className="rounded border px-3 py-1 text-sm hover:bg-slate-50"
                   >
                     Recalculate standings
+                  </button>
+                  <button
+                    onClick={() => deleteSeries(s)}
+                    className="rounded border border-red-200 px-3 py-1 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    Delete
                   </button>
                 </div>
               </li>

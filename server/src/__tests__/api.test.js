@@ -412,10 +412,11 @@ describe('admin races: score / publish / revise', () => {
     expect(ok.body.revised_at).toBeTruthy();
   });
 
-  test('DELETE only removes draft races', async () => {
+  test('DELETE removes any race regardless of status', async () => {
     const { race } = await createScoredRace(club.club_id, { publish: true });
-    const blocked = await request(app).delete(`/api/v1/admin/races/${race.race_id}`).set(ADMIN);
-    expect(blocked.status).toBe(400);
+    const res = await request(app).delete(`/api/v1/admin/races/${race.race_id}`).set(ADMIN);
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe(true);
   });
 });
 

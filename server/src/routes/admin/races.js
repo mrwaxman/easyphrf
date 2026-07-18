@@ -162,14 +162,22 @@ router.put(
   })
 );
 
-// DELETE /admin/races/:id — draft races only
+// DELETE /admin/races/:id
 router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
-    const race = await ownedRace(req.club.club_id, req.params.id);
-    if (race.status !== 'draft') {
-      throw badRequest('Only draft races can be deleted');
+    await ownedRace(req.club.club_id, req.params.id);
+    // Explicit cleanup in dependency order so the delete works correctly in
+    // both real Postgres and pg-mem (which mis-orders cascade deletes):
+    // 1. series_standings references fleets with no cascade
+    // 2. race_entries references fleets with no cascade
+    // 3. fleets + entries both cascade from race_id, but pg-mem orders wrong
+    const fleetsRes = await db.query('SELECT fleet_id FROM fleets WHERE race_id = $1', [req.params.id]);
+    if (fleetsRes.rows.length > 0) {
+      const fleetIds = fleetsRes.rows.map((r) => r.fleet_id);
+      await db.query(`DELETE FROM series_standings WHERE fleet_id = ANY($1::uuid[])`, [fleetIds]);
     }
+    await db.query('DELETE FROM race_entries WHERE race_id = $1', [req.params.id]);
     await db.query('DELETE FROM races WHERE race_id = $1 AND club_id = $2', [
       req.params.id,
       req.club.club_id,

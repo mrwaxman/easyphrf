@@ -95,6 +95,7 @@ export function adminApi(getToken) {
     listSeries: () => auth('/admin/series'),
     createSeries: (body) => auth('/admin/series', { method: 'POST', body }),
     updateSeries: (id, body) => auth(`/admin/series/${id}`, { method: 'PUT', body }),
+    deleteSeries: (id) => auth(`/admin/series/${id}`, { method: 'DELETE' }),
     recalculateSeries: (id) => auth(`/admin/series/${id}/recalculate`, { method: 'POST' }),
   };
 }

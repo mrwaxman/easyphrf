@@ -61,6 +61,24 @@ router.put(
   })
 );
 
+// DELETE /admin/series/:id
+router.delete(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    const result = await db.query(
+      'SELECT series_id FROM series WHERE series_id = $1 AND club_id = $2',
+      [req.params.id, req.club.club_id]
+    );
+    if (result.rows.length === 0) throw notFound('Series not found');
+    await db.query('UPDATE races SET series_id = NULL WHERE series_id = $1', [req.params.id]);
+    await db.query('DELETE FROM series WHERE series_id = $1 AND club_id = $2', [
+      req.params.id,
+      req.club.club_id,
+    ]);
+    res.json({ series_id: req.params.id, deleted: true });
+  })
+);
+
 // POST /admin/series/:id/recalculate
 router.post(
   '/:id/recalculate',

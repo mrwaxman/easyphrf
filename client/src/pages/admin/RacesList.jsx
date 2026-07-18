@@ -9,6 +9,16 @@ export default function RacesList() {
   const apiC = useApi();
   const state = useAsync(() => apiC.listRaces(), []);
 
+  const deleteRace = async (race) => {
+    if (!window.confirm(`Delete "${race.name}"? This cannot be undone.`)) return;
+    try {
+      await apiC.deleteRace(race.race_id);
+      state.reload();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="mb-4 flex items-center justify-between">
@@ -45,6 +55,12 @@ export default function RacesList() {
                         Start Sheet
                       </Link>
                     )}
+                    <button
+                      onClick={() => deleteRace(r)}
+                      className="text-red-600 hover:underline"
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
