@@ -69,7 +69,13 @@ const byPlace = (a, b) => {
  * place-sorted) entries, plus a combined overall PHRF standings list.
  */
 function assembleRaceDetail({ race, fleets, entries }, { timeZone = null } = {}) {
-  const decorated = entries.map(decorateEntry);
+  const decorated = entries.map((e) => {
+    const base = decorateEntry(e);
+    if (timeZone && e.finish_time) {
+      base.finish_time_local = utcToZonedParts(e.finish_time, timeZone).time;
+    }
+    return base;
+  });
 
   const fleetsOut = fleets.map((fleet) => {
     const fleetEntries = decorated

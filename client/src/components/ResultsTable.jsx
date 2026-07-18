@@ -34,6 +34,7 @@ export function ResultsTable({ fleet, startType }) {
           <th className="px-2 py-1">Sail #</th>
           <th className="px-2 py-1">Skipper</th>
           <th className="px-2 py-1">PHRF</th>
+          <th className="px-2 py-1">Finish</th>
           <th className="px-2 py-1">Elapsed</th>
           {!isPursuit && <th className="px-2 py-1">Corrected</th>}
         </tr>
@@ -61,6 +62,9 @@ export function ResultsTable({ fleet, startType }) {
                     {noSpin && <NonSpinBadge />}
                   </>
                 )}
+              </td>
+              <td className="px-2 py-1">
+                {finished ? (e.finish_time_local ?? '—') : '—'}
               </td>
               <td className="px-2 py-1">
                 {finished ? formatDuration(e.elapsed_seconds) : <FinishStatusLabel status={e.finish_status} />}
